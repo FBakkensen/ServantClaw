@@ -13,7 +13,7 @@ Operating rules:
 - `Verification` describes how completion will be proven; verification results are reported in chat, not logged here.
 
 ## T-001 - Scaffold the .NET solution and project structure
-Status: [ ]
+Status: [x]
 Goal: Create the initial solution, production projects, and test projects with boundaries that match the v1 architecture.
 
 Scope:

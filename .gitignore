@@ -31,5 +31,9 @@ dist/
 build/
 coverage/
 
+# .NET
+bin/
+obj/
+
 # Local Codex metadata
 .codex/

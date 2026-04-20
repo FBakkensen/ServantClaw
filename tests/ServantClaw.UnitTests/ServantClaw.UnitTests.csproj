@@ -1,0 +1,18 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\ServantClaw.Application\ServantClaw.Application.csproj" />
+    <ProjectReference Include="..\..\src\ServantClaw.Codex\ServantClaw.Codex.csproj" />
+    <ProjectReference Include="..\..\src\ServantClaw.Domain\ServantClaw.Domain.csproj" />
+    <ProjectReference Include="..\..\src\ServantClaw.Infrastructure\ServantClaw.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\src\ServantClaw.Telegram\ServantClaw.Telegram.csproj" />
+  </ItemGroup>
+
+</Project>

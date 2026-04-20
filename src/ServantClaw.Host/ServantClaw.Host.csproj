@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <OutputType>Exe</OutputType>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\ServantClaw.Application\ServantClaw.Application.csproj" />
+    <ProjectReference Include="..\ServantClaw.Infrastructure\ServantClaw.Infrastructure.csproj" />
+    <ProjectReference Include="..\ServantClaw.Telegram\ServantClaw.Telegram.csproj" />
+    <ProjectReference Include="..\ServantClaw.Codex\ServantClaw.Codex.csproj" />
+  </ItemGroup>
+</Project>
