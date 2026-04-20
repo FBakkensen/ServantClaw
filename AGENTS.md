@@ -13,7 +13,7 @@ dotnet run --project src/ServantClaw.Host/ServantClaw.Host.csproj
 dotnet test ServantClaw.sln
 ```
 
-`restore` resolves NuGet packages. `build` validates the full solution. `run` starts the hosted worker defined in `src/ServantClaw.Host/Program.cs`. `test` is the expected verification command, but the current test projects are scaffold-only and do not yet include a test SDK or framework packages.
+`restore` resolves NuGet packages. `build` validates the full solution. `run` starts the hosted worker defined in `src/ServantClaw.Host/Program.cs`; the host copies `appsettings*.json` to its output directory and validates those JSON settings at startup. `test` runs the unit, integration, and architecture suites.
 
 ## Coding Style & Naming Conventions
 This is a C#/.NET 9 codebase with `Nullable` and `ImplicitUsings` enabled in every project. Follow standard C# conventions: 4-space indentation, file-scoped namespaces, PascalCase for types and public members, camelCase for locals and parameters, and one public type per file where practical. Keep project boundaries clean: domain logic in `Domain`, orchestration in `Application`, adapters in `Infrastructure` or channel-specific projects.

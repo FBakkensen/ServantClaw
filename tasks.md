@@ -92,7 +92,7 @@ Verification:
 - Review the contracts to confirm Telegram and process-specific types do not leak into domain models
 
 ## T-004 - Implement JSON-backed configuration loading and startup validation
-Status: [ ]
+Status: [x]
 Goal: Load required configuration from disk and fail fast when critical prerequisites are missing or invalid.
 
 Scope:
