@@ -37,7 +37,7 @@ Verification:
 - Confirm the solution contains the worker, core application code, and test projects
 
 ## T-002 - Add engineering guardrails and baseline quality configuration
-Status: [ ]
+Status: [x]
 Goal: Establish the default development and verification tooling expected by the design before feature work begins.
 
 Scope:

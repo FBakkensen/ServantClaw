@@ -1,9 +1,11 @@
 using ServantClaw.Application;
+using Xunit;
 
 namespace ServantClaw.UnitTests;
 
 public sealed class AssemblyReferenceSmokeTests
 {
+    [Fact]
     public void CanLoadProductionAssemblyMarkers()
     {
         _ = typeof(ServantClaw.Application.AssemblyMarker);

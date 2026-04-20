@@ -1,0 +1,16 @@
+<Project>
+
+  <PropertyGroup>
+    <AnalysisMode>Recommended</AnalysisMode>
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(MSBuildProjectName)' != 'ServantClaw.UnitTests' and '$(MSBuildProjectName)' != 'ServantClaw.IntegrationTests' and '$(MSBuildProjectName)' != 'ServantClaw.ArchitectureTests'">
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(MSBuildProjectName)' == 'ServantClaw.UnitTests' or '$(MSBuildProjectName)' == 'ServantClaw.IntegrationTests' or '$(MSBuildProjectName)' == 'ServantClaw.ArchitectureTests'">
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+</Project>

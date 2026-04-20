@@ -3,11 +3,11 @@ using Microsoft.Extensions.Logging;
 
 namespace ServantClaw.Host;
 
-public sealed class Worker(ILogger<Worker> logger) : BackgroundService
+public sealed partial class Worker(ILogger<Worker> logger) : BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        logger.LogInformation("ServantClaw host started");
+        Log.HostStarted(logger);
 
         try
         {
@@ -15,7 +15,16 @@ public sealed class Worker(ILogger<Worker> logger) : BackgroundService
         }
         catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
         {
-            logger.LogInformation("ServantClaw host stopping");
+            Log.HostStopping(logger);
         }
+    }
+
+    private static partial class Log
+    {
+        [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "ServantClaw host started")]
+        public static partial void HostStarted(ILogger logger);
+
+        [LoggerMessage(EventId = 2, Level = LogLevel.Information, Message = "ServantClaw host stopping")]
+        public static partial void HostStopping(ILogger logger);
     }
 }
