@@ -65,7 +65,7 @@ Verification:
 - Run `dotnet format --verify-no-changes`
 
 ## T-003 - Define the core domain contracts and state models
-Status: [ ]
+Status: [x]
 Goal: Introduce the core models and interfaces for chat context, routing, threads, approvals, configuration, and backend interaction.
 
 Scope:
