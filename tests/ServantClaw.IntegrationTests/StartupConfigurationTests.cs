@@ -82,8 +82,7 @@ public sealed class StartupConfigurationTests
 
         builder.Configuration.Sources.Clear();
         builder.Configuration.AddInMemoryCollection(configurationValues);
-        builder.Services.AddServantClawStartupConfiguration(builder.Configuration);
-        builder.Services.AddHostedService<Worker>();
+        builder.AddServantClawHost();
 
         return builder.Build();
     }

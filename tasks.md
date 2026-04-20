@@ -119,7 +119,7 @@ Verification:
 - Run the service with missing or placeholder config and confirm startup fails clearly
 
 ## T-005 - Build the Worker Service host and Windows Service lifecycle integration
-Status: [ ]
+Status: [x]
 Goal: Create the service host that starts cleanly, shuts down cleanly, and wires together the application runtime.
 
 Scope:

@@ -1,6 +1,4 @@
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
-using ServantClaw.Host.Configuration;
 using ServantClaw.Host;
 
 var builder = Host.CreateApplicationBuilder(new HostApplicationBuilderSettings
@@ -9,8 +7,7 @@ var builder = Host.CreateApplicationBuilder(new HostApplicationBuilderSettings
     ContentRootPath = AppContext.BaseDirectory
 });
 
-builder.Services.AddServantClawStartupConfiguration(builder.Configuration);
-builder.Services.AddHostedService<Worker>();
+builder.AddServantClawHost();
 
 var host = builder.Build();
 await host.RunAsync();

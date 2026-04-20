@@ -1,30 +1,58 @@
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using ServantClaw.Host.Runtime;
 
 namespace ServantClaw.Host;
 
-public sealed partial class Worker(ILogger<Worker> logger) : BackgroundService
+public sealed partial class Worker(ILogger<Worker> logger, HostRuntimeCoordinator runtimeCoordinator) : IHostedService
 {
-    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    private bool hasStarted;
+
+    public async Task StartAsync(CancellationToken cancellationToken)
     {
-        Log.HostStarted(logger);
+        Log.HostStarting(logger);
 
         try
         {
-            await Task.Delay(Timeout.InfiniteTimeSpan, stoppingToken);
+            await runtimeCoordinator.StartAsync(cancellationToken);
+            hasStarted = true;
         }
-        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        catch (Exception exception)
         {
-            Log.HostStopping(logger);
+            Log.HostStartupFailed(logger, exception);
+            throw;
         }
+
+        Log.HostStarted(logger);
+    }
+
+    public async Task StopAsync(CancellationToken cancellationToken)
+    {
+        if (!hasStarted)
+        {
+            return;
+        }
+
+        Log.HostStopping(logger);
+        await runtimeCoordinator.StopAsync(cancellationToken);
+        Log.HostStopped(logger);
     }
 
     private static partial class Log
     {
-        [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "ServantClaw host started")]
+        [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "ServantClaw host starting")]
+        public static partial void HostStarting(ILogger logger);
+
+        [LoggerMessage(EventId = 2, Level = LogLevel.Information, Message = "ServantClaw host started")]
         public static partial void HostStarted(ILogger logger);
 
-        [LoggerMessage(EventId = 2, Level = LogLevel.Information, Message = "ServantClaw host stopping")]
+        [LoggerMessage(EventId = 3, Level = LogLevel.Critical, Message = "ServantClaw host startup failed")]
+        public static partial void HostStartupFailed(ILogger logger, Exception exception);
+
+        [LoggerMessage(EventId = 4, Level = LogLevel.Information, Message = "ServantClaw host stopping")]
         public static partial void HostStopping(ILogger logger);
+
+        [LoggerMessage(EventId = 5, Level = LogLevel.Information, Message = "ServantClaw host stopped")]
+        public static partial void HostStopped(ILogger logger);
     }
 }
