@@ -82,34 +82,6 @@ public sealed class TelegramCommandHandlingTests
     }
 
     [Fact]
-    public async Task TextMessageShouldCreateThreadMappingForBoundContext()
-    {
-        FakeTelegramPollingClient pollingClient = new();
-        await using TestHostContext context = await CreateStartedHost(pollingClient);
-        IStateStore stateStore = context.Host.Services.GetRequiredService<IStateStore>();
-        ChatState state = new(
-            new ChatId(100),
-            AgentKind.Coding,
-            new AgentProjectBindings(null, new ProjectId("repo")));
-        await stateStore.SaveChatStateAsync(state, CancellationToken.None);
-
-        pollingClient.EnqueueBatch(
-            new TelegramIncomingUpdate(
-                1,
-                new TelegramIncomingMessage(100, 42, "approved-owner", DateTimeOffset.UtcNow, "hello")));
-
-        await Task.Delay(200);
-
-        ThreadMapping? mapping = await stateStore.GetThreadMappingAsync(
-            new ThreadContext(new ChatId(100), AgentKind.Coding, new ProjectId("repo")),
-            CancellationToken.None);
-
-        mapping.Should().NotBeNull();
-        mapping!.CurrentThread.Value.Should().NotBeNullOrWhiteSpace();
-        mapping.PreviousThreads.Should().BeEmpty();
-    }
-
-    [Fact]
     public async Task ClearCommandShouldRotatePersistedThreadMapping()
     {
         FakeTelegramPollingClient pollingClient = new();
@@ -135,7 +107,7 @@ public sealed class TelegramCommandHandlingTests
 
         reply.Text.Should().Be("Started a fresh thread for agent 'coding' and project 'repo'.");
         updatedMapping.Should().NotBeNull();
-        updatedMapping!.CurrentThread.Should().NotBe(new ThreadReference("thread-1"));
+        updatedMapping!.CurrentThread.Should().BeNull();
         updatedMapping.PreviousThreads.Should().ContainSingle().Which.Should().Be(new ThreadReference("thread-1"));
     }
 

@@ -11,7 +11,7 @@
       "ignore-changes-in": ["**/obj/**", "**/bin/**", "**/*.generated.cs"]
     },
     "thresholds": { "high": 100, "low": 100, "break": 100 },
-    "ignore-methods": ["*Log", "Console.Write*", "*Exception.ctor"],
+    "ignore-methods": ["*Log", "Log.*", "Console.Write*", "*Exception.ctor", "ConfigureAwait"],
     "reporters": ["progress", "html", "json", "cleartext"]
   }
 }

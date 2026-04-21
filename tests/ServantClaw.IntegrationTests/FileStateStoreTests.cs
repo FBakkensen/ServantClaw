@@ -62,6 +62,26 @@ public sealed class FileStateStoreTests
     }
 
     [Fact]
+    public async Task StateStoreShouldRoundTripThreadMappingWithNullCurrentThread()
+    {
+        using TestHostContext context = CreateTestHost();
+        IStateStore store = context.Services.GetRequiredService<IStateStore>();
+
+        ThreadMapping expected = new(
+            new ThreadContext(new ChatId(77), AgentKind.General, new ProjectId("docs")),
+            null,
+            [new ThreadReference("thread-historic")]);
+
+        await store.SaveThreadMappingAsync(expected, CancellationToken.None);
+
+        ThreadMapping? actual = await store.GetThreadMappingAsync(expected.Context, CancellationToken.None);
+
+        actual.Should().NotBeNull();
+        actual!.CurrentThread.Should().BeNull();
+        actual.PreviousThreads.Should().ContainSingle().Which.Should().Be(new ThreadReference("thread-historic"));
+    }
+
+    [Fact]
     public async Task StateStoreShouldPersistAndQueryPendingApprovals()
     {
         using TestHostContext context = CreateTestHost();

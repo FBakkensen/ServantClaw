@@ -1,13 +1,11 @@
 using ServantClaw.Domain.Routing;
-using ServantClaw.Domain.Runtime;
 using ServantClaw.Domain.State;
 
 namespace ServantClaw.Application.Runtime;
 
-public sealed class ThreadMappingCoordinator(IStateStore stateStore, IThreadReferenceGenerator threadReferenceGenerator)
+public sealed class ThreadMappingCoordinator(IStateStore stateStore)
 {
     private readonly IStateStore stateStore = stateStore ?? throw new ArgumentNullException(nameof(stateStore));
-    private readonly IThreadReferenceGenerator threadReferenceGenerator = threadReferenceGenerator ?? throw new ArgumentNullException(nameof(threadReferenceGenerator));
 
     public async ValueTask<ThreadMapping> ResolveAsync(ThreadContext context, CancellationToken cancellationToken)
     {
@@ -19,7 +17,7 @@ public sealed class ThreadMappingCoordinator(IStateStore stateStore, IThreadRefe
             return existingMapping;
         }
 
-        ThreadMapping createdMapping = CreateInitialMapping(context);
+        ThreadMapping createdMapping = new(context, null);
         await stateStore.SaveThreadMappingAsync(createdMapping, cancellationToken);
         return createdMapping;
     }
@@ -30,13 +28,10 @@ public sealed class ThreadMappingCoordinator(IStateStore stateStore, IThreadRefe
 
         ThreadMapping? existingMapping = await stateStore.GetThreadMappingAsync(context, cancellationToken);
         ThreadMapping updatedMapping = existingMapping is null
-            ? CreateInitialMapping(context)
-            : existingMapping.Rotate(threadReferenceGenerator.CreateThreadReference());
+            ? new ThreadMapping(context, null)
+            : existingMapping.Rotate();
 
         await stateStore.SaveThreadMappingAsync(updatedMapping, cancellationToken);
         return updatedMapping;
     }
-
-    private ThreadMapping CreateInitialMapping(ThreadContext context) =>
-        new(context, threadReferenceGenerator.CreateThreadReference());
 }
