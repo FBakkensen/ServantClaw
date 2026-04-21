@@ -50,5 +50,13 @@ The transport adapter in `src/ServantClaw.Codex/Transport` talks to a local `cod
 - `SendTurnAsync` requires a prior `CreateThreadAsync` or `ResumeThreadAsync` to establish the current thread on the client. T-015's wiring must honour that call order.
 - `initialize` + `initialized` run exactly once per session (re-run if the session is replaced). Session loss fails pending requests with `BackendUnavailableException` and does not auto-replay; durable recovery is T-018's scope.
 
+## Approval Coordination
+`IApprovalCoordinator` (`src/ServantClaw.Application/Approvals`) is the rendezvous between the turn executor and the `/approve` / `/deny` command handlers. A few constraints future work must respect:
+
+- The executor **blocks in place** on `WaitForDecisionAsync`. Do not refactor to a "park and resume from the command handler" pattern — the backend's global `activeTurn` holds the open JSON-RPC request ID and cannot be handed to another worker. Blocking also lines up with the per-context queue's ordering guarantees.
+- Persist the pending `ApprovalRecord` **before** the Telegram notification. The on-disk record is the audit substrate; a crash after send-without-save would leave an orphan in Telegram.
+- `ResolveAsync` enforces chat-scope: `/approve` / `/deny` are rejected unless the command chat matches `ApprovalContext.ChatId`. This is a safety rule from US-09, not just a check; do not loosen it to "any owner chat."
+- After a service restart the in-memory TCS map is gone. `ResolveAsync` against a pending-on-disk record without a live waiter returns `NotActive` (the operator sees "is no longer active"). Stale-record sweep and proper restart recovery belong to T-018.
+
 ## Commit & Pull Request Guidelines
 Recent history uses short, imperative commit subjects such as `Scaffold ServantClaw solution structure`. Keep that style: concise, capitalized, and focused on one change. PRs should explain what changed, why it changed, and how it was verified. Link the relevant task or issue, and include config notes or sample output when behavior changes.

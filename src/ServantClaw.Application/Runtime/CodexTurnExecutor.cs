@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging;
+using ServantClaw.Application.Approvals;
 using ServantClaw.Application.Commands;
 using ServantClaw.Domain.Approvals;
 using ServantClaw.Domain.Common;
@@ -11,17 +12,17 @@ namespace ServantClaw.Application.Runtime;
 public sealed partial class CodexTurnExecutor(
     IBackendClient backendClient,
     IStateStore stateStore,
+    IApprovalCoordinator approvalCoordinator,
     IChatReplySink chatReplySink,
     ILogger<CodexTurnExecutor> logger) : ITurnExecutor
 {
     public const string BackendUnavailableReply = "The Codex backend is currently unavailable. Please try again in a moment.";
     public const string GenericFailureReply = "An unexpected error occurred while running the turn. Please try again.";
     public const string EmptyResponseReply = "The assistant completed the turn without a text response.";
-    public const string ApprovalNotSupportedReply = "That action needs an approval, which isn't supported yet. The assistant stopped.";
-    public const int MaxApprovalDenyIterations = 4;
 
     private readonly IBackendClient backendClient = backendClient ?? throw new ArgumentNullException(nameof(backendClient));
     private readonly IStateStore stateStore = stateStore ?? throw new ArgumentNullException(nameof(stateStore));
+    private readonly IApprovalCoordinator approvalCoordinator = approvalCoordinator ?? throw new ArgumentNullException(nameof(approvalCoordinator));
     private readonly IChatReplySink chatReplySink = chatReplySink ?? throw new ArgumentNullException(nameof(chatReplySink));
     private readonly ILogger<CodexTurnExecutor> logger = logger ?? throw new ArgumentNullException(nameof(logger));
 
@@ -41,10 +42,18 @@ public sealed partial class CodexTurnExecutor(
                 .SendTurnAsync(new BackendTurnRequest(context, turn.MessageText), cancellationToken)
                 .ConfigureAwait(false);
 
-            if (result.RequiresApproval)
+            while (result.RequiresApproval)
             {
-                await HandleApprovalLoopAsync(context, result, cancellationToken).ConfigureAwait(false);
-                return;
+                ApprovalRecord pending = result.RequestedApproval!;
+                ApprovalDecision decision = await approvalCoordinator
+                    .WaitForDecisionAsync(pending, cancellationToken)
+                    .ConfigureAwait(false);
+
+                Log.ApprovalReceived(logger, context.ChatId.Value, pending.ApprovalId.Value, decision.ToString());
+
+                result = await backendClient
+                    .ContinueApprovedActionAsync(pending.ApprovalId, decision, cancellationToken)
+                    .ConfigureAwait(false);
             }
 
             await DeliverFinalResponseAsync(context, result.FinalResponse, cancellationToken).ConfigureAwait(false);
@@ -89,35 +98,6 @@ public sealed partial class CodexTurnExecutor(
         Log.ThreadCreated(logger, context.ChatId.Value, context.Agent.ToString(), context.ProjectId.Value, created.Value);
     }
 
-    private async ValueTask HandleApprovalLoopAsync(
-        ThreadContext context,
-        BackendTurnResult initialResult,
-        CancellationToken cancellationToken)
-    {
-        BackendTurnResult current = initialResult;
-        for (int iteration = 0; iteration < MaxApprovalDenyIterations; iteration++)
-        {
-            ApprovalRecord? pending = current.RequestedApproval;
-            if (pending is null)
-            {
-                break;
-            }
-
-            Log.ApprovalAutoDenied(logger, context.ChatId.Value, context.Agent.ToString(), context.ProjectId.Value, pending.ApprovalId.Value);
-            current = await backendClient
-                .ContinueApprovedActionAsync(pending.ApprovalId, ApprovalDecision.Denied, cancellationToken)
-                .ConfigureAwait(false);
-        }
-
-        // Stryker disable once all : low-value - branch guards a cosmetic warning log only; both branches produce the same user-visible reply.
-        if (current.RequiresApproval)
-        {
-            Log.ApprovalLoopBoundReached(logger, context.ChatId.Value, context.Agent.ToString(), context.ProjectId.Value);
-        }
-
-        await chatReplySink.SendMessageAsync(context.ChatId, ApprovalNotSupportedReply, cancellationToken).ConfigureAwait(false);
-    }
-
     private async ValueTask DeliverFinalResponseAsync(ThreadContext context, string? finalResponse, CancellationToken cancellationToken)
     {
         string textToSend = string.IsNullOrWhiteSpace(finalResponse) ? EmptyResponseReply : finalResponse;
@@ -153,15 +133,9 @@ public sealed partial class CodexTurnExecutor(
 
         [LoggerMessage(
             EventId = 424,
-            Level = LogLevel.Warning,
-            Message = "Auto-denied approval {ApprovalId} for chat {ChatId} agent {Agent} project {ProjectId}; approvals are not yet supported")]
-        public static partial void ApprovalAutoDenied(ILogger logger, long chatId, string agent, string projectId, string approvalId);
-
-        [LoggerMessage(
-            EventId = 425,
-            Level = LogLevel.Warning,
-            Message = "Approval auto-deny loop reached the maximum iteration bound for chat {ChatId} agent {Agent} project {ProjectId}")]
-        public static partial void ApprovalLoopBoundReached(ILogger logger, long chatId, string agent, string projectId);
+            Level = LogLevel.Information,
+            Message = "Approval {ApprovalId} resolved with decision {Decision} for chat {ChatId}")]
+        public static partial void ApprovalReceived(ILogger logger, long chatId, string approvalId, string decision);
 
         [LoggerMessage(
             EventId = 426,

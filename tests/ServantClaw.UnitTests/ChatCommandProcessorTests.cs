@@ -1,8 +1,10 @@
 using FluentAssertions;
+using ServantClaw.Application.Approvals;
 using ServantClaw.Application.Commands;
 using ServantClaw.Application.Intake.Models;
 using ServantClaw.Application.Runtime;
 using ServantClaw.Domain.Agents;
+using ServantClaw.Domain.Approvals;
 using ServantClaw.Domain.Common;
 using ServantClaw.Domain.Routing;
 using ServantClaw.UnitTests.Testing;
@@ -259,7 +261,8 @@ public sealed class ChatCommandProcessorTests
         Action act = () => _ = new ChatCommandProcessor(
             null!,
             new FakeProjectCatalog(),
-            new ThreadMappingCoordinator(new InMemoryStateStore()));
+            new ThreadMappingCoordinator(new InMemoryStateStore()),
+            new StubApprovalCoordinator());
 
         act.Should().Throw<ArgumentNullException>().Which.ParamName.Should().Be("stateStore");
     }
@@ -271,7 +274,8 @@ public sealed class ChatCommandProcessorTests
         Action act = () => _ = new ChatCommandProcessor(
             stateStore,
             null!,
-            new ThreadMappingCoordinator(stateStore));
+            new ThreadMappingCoordinator(stateStore),
+            new StubApprovalCoordinator());
 
         act.Should().Throw<ArgumentNullException>().Which.ParamName.Should().Be("projectCatalog");
     }
@@ -279,9 +283,127 @@ public sealed class ChatCommandProcessorTests
     [Fact]
     public void ConstructorShouldRejectNullThreadMappingCoordinator()
     {
-        Action act = () => _ = new ChatCommandProcessor(new InMemoryStateStore(), new FakeProjectCatalog(), null!);
+        Action act = () => _ = new ChatCommandProcessor(
+            new InMemoryStateStore(),
+            new FakeProjectCatalog(),
+            null!,
+            new StubApprovalCoordinator());
 
         act.Should().Throw<ArgumentNullException>().Which.ParamName.Should().Be("threadMappingCoordinator");
+    }
+
+    [Fact]
+    public void ConstructorShouldRejectNullApprovalCoordinator()
+    {
+        InMemoryStateStore stateStore = new();
+        Action act = () => _ = new ChatCommandProcessor(
+            stateStore,
+            new FakeProjectCatalog(),
+            new ThreadMappingCoordinator(stateStore),
+            null!);
+
+        act.Should().Throw<ArgumentNullException>().Which.ParamName.Should().Be("approvalCoordinator");
+    }
+
+    [Fact]
+    public async Task ApproveCommandShouldDelegateToCoordinatorAndReturnAckMessage()
+    {
+        InMemoryStateStore stateStore = new();
+        StubApprovalCoordinator coordinator = new();
+        coordinator.ResolutionResults.Enqueue(new ApprovalResolutionResult(
+            ApprovalResolutionOutcome.Resolved,
+            "Approval 'A1' accepted. The assistant is resuming the turn."));
+        ChatCommandProcessor processor = CreateProcessor(stateStore, new FakeProjectCatalog(), coordinator);
+
+        ChatCommandResult result = await processor.ProcessAsync(
+            CreateUpdate(new InboundChatCommand("approve", ["A1"], "/approve A1")),
+            CancellationToken.None);
+
+        result.ResponseText.Should().Be("Approval 'A1' accepted. The assistant is resuming the turn.");
+        coordinator.ResolveCalls.Should().ContainSingle();
+        coordinator.ResolveCalls[0].ApprovalId.Should().Be(new ApprovalId("A1"));
+        coordinator.ResolveCalls[0].ChatId.Should().Be(new ChatId(100));
+        coordinator.ResolveCalls[0].Decision.Should().Be(ApprovalDecision.Approved);
+    }
+
+    [Fact]
+    public async Task DenyCommandShouldDelegateToCoordinatorWithDeniedDecision()
+    {
+        InMemoryStateStore stateStore = new();
+        StubApprovalCoordinator coordinator = new();
+        coordinator.ResolutionResults.Enqueue(new ApprovalResolutionResult(
+            ApprovalResolutionOutcome.Resolved,
+            "Approval 'A1' denied."));
+        ChatCommandProcessor processor = CreateProcessor(stateStore, new FakeProjectCatalog(), coordinator);
+
+        ChatCommandResult result = await processor.ProcessAsync(
+            CreateUpdate(new InboundChatCommand("deny", ["A1"], "/deny A1")),
+            CancellationToken.None);
+
+        result.ResponseText.Should().Be("Approval 'A1' denied.");
+        coordinator.ResolveCalls.Should().ContainSingle().Which.Decision.Should().Be(ApprovalDecision.Denied);
+    }
+
+    [Fact]
+    public async Task ApproveCommandShouldReturnUsageWhenArgumentsMissing()
+    {
+        InMemoryStateStore stateStore = new();
+        StubApprovalCoordinator coordinator = new();
+        ChatCommandProcessor processor = CreateProcessor(stateStore, new FakeProjectCatalog(), coordinator);
+
+        ChatCommandResult result = await processor.ProcessAsync(
+            CreateUpdate(new InboundChatCommand("approve", [], "/approve")),
+            CancellationToken.None);
+
+        result.ResponseText.Should().Be("Usage: /approve <approval-id>");
+        coordinator.ResolveCalls.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task ApproveCommandShouldReturnUsageWhenTooManyArguments()
+    {
+        InMemoryStateStore stateStore = new();
+        StubApprovalCoordinator coordinator = new();
+        ChatCommandProcessor processor = CreateProcessor(stateStore, new FakeProjectCatalog(), coordinator);
+
+        ChatCommandResult result = await processor.ProcessAsync(
+            CreateUpdate(new InboundChatCommand("approve", ["A1", "extra"], "/approve A1 extra")),
+            CancellationToken.None);
+
+        result.ResponseText.Should().Be("Usage: /approve <approval-id>");
+        coordinator.ResolveCalls.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task DenyCommandShouldReturnUsageWhenArgumentsMissing()
+    {
+        InMemoryStateStore stateStore = new();
+        StubApprovalCoordinator coordinator = new();
+        ChatCommandProcessor processor = CreateProcessor(stateStore, new FakeProjectCatalog(), coordinator);
+
+        ChatCommandResult result = await processor.ProcessAsync(
+            CreateUpdate(new InboundChatCommand("deny", [], "/deny")),
+            CancellationToken.None);
+
+        result.ResponseText.Should().Be("Usage: /deny <approval-id>");
+        coordinator.ResolveCalls.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task ApproveCommandShouldPropagateUnknownOutcomeMessage()
+    {
+        InMemoryStateStore stateStore = new();
+        StubApprovalCoordinator coordinator = new();
+        coordinator.ResolutionResults.Enqueue(new ApprovalResolutionResult(
+            ApprovalResolutionOutcome.UnknownId,
+            "Approval 'missing' was not found."));
+        ChatCommandProcessor processor = CreateProcessor(stateStore, new FakeProjectCatalog(), coordinator);
+
+        ChatCommandResult result = await processor.ProcessAsync(
+            CreateUpdate(new InboundChatCommand("approve", ["missing"], "/approve missing")),
+            CancellationToken.None);
+
+        result.ResponseText.Should().Be("Approval 'missing' was not found.");
     }
 
     [Fact]
@@ -322,11 +444,13 @@ public sealed class ChatCommandProcessorTests
 
     private static ChatCommandProcessor CreateProcessor(
         InMemoryStateStore stateStore,
-        FakeProjectCatalog projectCatalog) =>
+        FakeProjectCatalog projectCatalog,
+        IApprovalCoordinator? approvalCoordinator = null) =>
         new(
             stateStore,
             projectCatalog,
-            new ThreadMappingCoordinator(stateStore));
+            new ThreadMappingCoordinator(stateStore),
+            approvalCoordinator ?? new StubApprovalCoordinator());
 
     private sealed class FakeProjectCatalog : IProjectCatalog
     {
@@ -353,5 +477,30 @@ public sealed class ChatCommandProcessorTests
                     .OrderBy(projectId => projectId, StringComparer.OrdinalIgnoreCase)
                     .Select(projectId => new ProjectId(projectId))
                     .ToArray());
+    }
+
+    private sealed class StubApprovalCoordinator : IApprovalCoordinator
+    {
+        public Queue<ApprovalResolutionResult> ResolutionResults { get; } = new();
+
+        public List<(ApprovalId ApprovalId, ChatId ChatId, ApprovalDecision Decision)> ResolveCalls { get; } = [];
+
+        public ValueTask<ApprovalDecision> WaitForDecisionAsync(ApprovalRecord record, CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
+        public ValueTask<ApprovalResolutionResult> ResolveAsync(
+            ApprovalId approvalId,
+            ChatId commandChatId,
+            ApprovalDecision decision,
+            CancellationToken cancellationToken)
+        {
+            ResolveCalls.Add((approvalId, commandChatId, decision));
+            if (ResolutionResults.Count == 0)
+            {
+                throw new InvalidOperationException("No queued resolution results for stub coordinator.");
+            }
+
+            return ValueTask.FromResult(ResolutionResults.Dequeue());
+        }
     }
 }
