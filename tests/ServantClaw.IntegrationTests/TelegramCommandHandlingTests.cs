@@ -60,6 +60,27 @@ public sealed class TelegramCommandHandlingTests
         currentState.Should().Be(existingState);
     }
 
+    [Fact]
+    public async Task TextMessageShouldRefuseExecutionWhenNoActiveProjectIsBound()
+    {
+        FakeTelegramPollingClient pollingClient = new();
+        await using TestHostContext context = await CreateStartedHost(pollingClient);
+        IStateStore stateStore = context.Host.Services.GetRequiredService<IStateStore>();
+        await stateStore.SaveChatStateAsync(
+            new ChatState(new ChatId(100), AgentKind.Coding, new AgentProjectBindings()),
+            CancellationToken.None);
+
+        pollingClient.EnqueueBatch(
+            new TelegramIncomingUpdate(
+                1,
+                new TelegramIncomingMessage(100, 42, "approved-owner", DateTimeOffset.UtcNow, "hello")));
+
+        SentTelegramMessage reply = await pollingClient.DequeueSentMessageAsync(TimeSpan.FromSeconds(2));
+
+        reply.Text.Should().Be(
+            "No active project is selected for agent 'coding'. Use /project <agent-id> <project-id> before sending normal messages. Available projects: docs, repo.");
+    }
+
     private static async ValueTask<TestHostContext> CreateStartedHost(FakeTelegramPollingClient pollingClient)
     {
         TestHostContext context = CreateHost(pollingClient);
@@ -127,7 +148,29 @@ public sealed class TelegramCommandHandlingTests
 
             if (Directory.Exists(BotRootPath))
             {
-                Directory.Delete(BotRootPath, recursive: true);
+                await DeleteDirectoryWithRetryAsync(BotRootPath);
+            }
+        }
+
+        private static async Task DeleteDirectoryWithRetryAsync(string path)
+        {
+            const int maxAttempts = 5;
+
+            for (int attempt = 1; attempt <= maxAttempts; attempt++)
+            {
+                try
+                {
+                    Directory.Delete(path, recursive: true);
+                    return;
+                }
+                catch (IOException) when (attempt < maxAttempts)
+                {
+                    await Task.Delay(100);
+                }
+                catch (UnauthorizedAccessException) when (attempt < maxAttempts)
+                {
+                    await Task.Delay(100);
+                }
             }
         }
     }

@@ -91,6 +91,13 @@ public sealed class ChatCommandProcessorTests
 
         public ValueTask<bool> ProjectExistsAsync(ProjectId projectId, CancellationToken cancellationToken) =>
             ValueTask.FromResult(ExistingProjects.Contains(projectId.Value));
+
+        public ValueTask<IReadOnlyCollection<ProjectId>> ListProjectsAsync(CancellationToken cancellationToken) =>
+            ValueTask.FromResult<IReadOnlyCollection<ProjectId>>(
+                ExistingProjects
+                    .OrderBy(projectId => projectId, StringComparer.OrdinalIgnoreCase)
+                    .Select(projectId => new ProjectId(projectId))
+                    .ToArray());
     }
 
     private sealed class InMemoryStateStore : IStateStore
