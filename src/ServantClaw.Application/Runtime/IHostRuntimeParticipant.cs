@@ -1,4 +1,4 @@
-namespace ServantClaw.Host.Runtime;
+namespace ServantClaw.Application.Runtime;
 
 public interface IHostRuntimeParticipant
 {
