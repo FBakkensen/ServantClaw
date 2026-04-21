@@ -41,5 +41,14 @@ Per-task runs use `--since:main` to mutate only files changed against the target
 
 Configs also apply `ignore-methods` for logging calls and exception constructors to suppress known noise. Per-project configs live at `src/<Project>/stryker-config.json`. T-023 will expand scope to all safety-critical slices named in `design.md` and prepare CI enforcement.
 
+## Codex Backend Transport
+The transport adapter in `src/ServantClaw.Codex/Transport` talks to a local `codex app-server` over `stdio`. A few long-lived constraints future work must respect:
+
+- The supervisor publishes a `BackendSession` through `IBackendSessionPublisher` (`src/ServantClaw.Application/Runtime`) whenever a process starts cleanly, and retracts + cancels the session's `SessionLifetime` token on exit. Transport code subscribes via `IBackendSessionSource`. Do not reach for the `BackendProcessSupervisor` concrete type or the `IBackendProcessHandle` streams from anywhere else.
+- Codex uses JSON-RPC 2.0 **lite** — no `"jsonrpc": "2.0"` field on the wire, JSONL framing, and **both sides originate requests**. Approvals (`item/commandExecution/requestApproval`, `item/fileChange/requestApproval`) arrive as server→client requests; answer them by `SendResponseAsync(requestId, "accept" | "decline", ...)` on `StdioJsonRpcConnection`. Unknown server methods get a JSON-RPC `-32601` error response — do not ignore, the server will block on them.
+- `StdioCodexBackendClient` serializes turns **globally** (a single `activeTurn` per client instance). Codex's streamed `item/*` events do not carry a `threadId`, so multiplexing per-context turn aggregation would be unsafe. The per-context queue still guarantees ordering within a `ThreadContext`; across contexts, turns run serially on the shared backend.
+- `SendTurnAsync` requires a prior `CreateThreadAsync` or `ResumeThreadAsync` to establish the current thread on the client. T-015's wiring must honour that call order.
+- `initialize` + `initialized` run exactly once per session (re-run if the session is replaced). Session loss fails pending requests with `BackendUnavailableException` and does not auto-replay; durable recovery is T-018's scope.
+
 ## Commit & Pull Request Guidelines
 Recent history uses short, imperative commit subjects such as `Scaffold ServantClaw solution structure`. Keep that style: concise, capitalized, and focused on one change. PRs should explain what changed, why it changed, and how it was verified. Link the relevant task or issue, and include config notes or sample output when behavior changes.

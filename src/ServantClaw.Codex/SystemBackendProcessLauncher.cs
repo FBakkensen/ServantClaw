@@ -18,6 +18,9 @@ public sealed class SystemBackendProcessLauncher : IBackendProcessLauncher
             UseShellExecute = false,
             CreateNoWindow = true,
             WorkingDirectory = configuration.WorkingDirectory ?? string.Empty,
+            RedirectStandardInput = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
         };
 
         foreach (string argument in configuration.Arguments)

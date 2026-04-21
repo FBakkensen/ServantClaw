@@ -404,7 +404,7 @@ Verification:
 - Exercise backend supervisor startup and restart paths in a controlled environment
 
 ## T-014 - Implement the `stdio` JSON-RPC transport adapter for `codex app-server`
-Status: [ ]
+Status: [x]
 Goal: Communicate with the local Codex backend over redirected standard IO behind the backend abstraction.
 
 Scope:
