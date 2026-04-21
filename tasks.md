@@ -430,7 +430,7 @@ Verification:
 - Exercise a controlled integration path against a real or representative backend process
 
 ## T-015 - Wire end-to-end Telegram message execution through the backend
-Status: [ ]
+Status: [x]
 Goal: Route a normal Telegram message from the approved user through context resolution, queueing, backend execution, and final reply delivery.
 
 Scope:

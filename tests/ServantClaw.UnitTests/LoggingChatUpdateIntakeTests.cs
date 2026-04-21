@@ -22,8 +22,9 @@ public sealed class LoggingChatUpdateIntakeTests
         stateStore.ChatStates[100] = new ChatState(new ChatId(100), AgentKind.Coding, new AgentProjectBindings());
 
         RecordingChatReplySink replySink = new();
+        RecordingTurnQueue turnQueue = new();
         FakeProjectCatalog projectCatalog = new(["docs", "repo"]);
-        LoggingChatUpdateIntake intake = CreateIntake(stateStore, projectCatalog, replySink);
+        LoggingChatUpdateIntake intake = CreateIntake(stateStore, projectCatalog, replySink, turnQueue);
 
         await intake.HandleAsync(
             new InboundChatUpdate(
@@ -38,10 +39,11 @@ public sealed class LoggingChatUpdateIntakeTests
         replySink.Messages[0].ChatId.Should().Be(new ChatId(100));
         replySink.Messages[0].Text.Should().Be(
             "No active project is selected for agent 'coding'. Use /project <agent-id> <project-id> before sending normal messages. Available projects: docs, repo.");
+        turnQueue.EnqueuedTurns.Should().BeEmpty();
     }
 
     [Fact]
-    public async Task TextMessageShouldNotReplyWhenActiveProjectExists()
+    public async Task TextMessageShouldEnqueueTurnWhenActiveProjectExists()
     {
         InMemoryStateStore stateStore = new();
         stateStore.ChatStates[100] = new ChatState(
@@ -50,7 +52,34 @@ public sealed class LoggingChatUpdateIntakeTests
             new AgentProjectBindings(null, new ProjectId("repo")));
 
         RecordingChatReplySink replySink = new();
-        LoggingChatUpdateIntake intake = CreateIntake(stateStore, new FakeProjectCatalog(["docs", "repo"]), replySink);
+        RecordingTurnQueue turnQueue = new();
+        LoggingChatUpdateIntake intake = CreateIntake(stateStore, new FakeProjectCatalog(["docs", "repo"]), replySink, turnQueue);
+
+        await intake.HandleAsync(
+            new InboundChatUpdate(
+                new ChatId(100),
+                new UserId(42),
+                "approved-owner",
+                DateTimeOffset.UtcNow,
+                new InboundChatTextMessage("  help me  ")),
+            CancellationToken.None);
+
+        replySink.Messages.Should().BeEmpty();
+        turnQueue.EnqueuedTurns.Should().ContainSingle();
+        QueuedTurn enqueued = turnQueue.EnqueuedTurns[0];
+        enqueued.Context.Should().Be(new ThreadContext(new ChatId(100), AgentKind.Coding, new ProjectId("repo")));
+        enqueued.MessageText.Should().Be("help me");
+    }
+
+    [Fact]
+    public async Task TextMessageShouldReplyWithEmptyCatalogHintWhenNoProjectsExist()
+    {
+        InMemoryStateStore stateStore = new();
+        stateStore.ChatStates[100] = new ChatState(new ChatId(100), AgentKind.General, new AgentProjectBindings());
+
+        RecordingChatReplySink replySink = new();
+        RecordingTurnQueue turnQueue = new();
+        LoggingChatUpdateIntake intake = CreateIntake(stateStore, new FakeProjectCatalog([]), replySink, turnQueue);
 
         await intake.HandleAsync(
             new InboundChatUpdate(
@@ -61,30 +90,22 @@ public sealed class LoggingChatUpdateIntakeTests
                 new InboundChatTextMessage("help me")),
             CancellationToken.None);
 
-        replySink.Messages.Should().BeEmpty();
-        ThreadContext context = new(new ChatId(100), AgentKind.Coding, new ProjectId("repo"));
-        stateStore.ThreadMappings[context].CurrentThread.Should().Be(new ThreadReference("thread-1"));
+        replySink.Messages.Should().ContainSingle();
+        replySink.Messages[0].Text.Should().Be(
+            "No active project is selected for agent 'general'. Use /project <agent-id> <project-id> before sending normal messages. No projects are currently available.");
+        turnQueue.EnqueuedTurns.Should().BeEmpty();
     }
 
     private static LoggingChatUpdateIntake CreateIntake(
         IStateStore stateStore,
         IProjectCatalog projectCatalog,
-        IChatReplySink replySink) =>
-        CreateIntake(stateStore, projectCatalog, replySink, ["thread-1", "thread-2"]);
-
-    private static LoggingChatUpdateIntake CreateIntake(
-        IStateStore stateStore,
-        IProjectCatalog projectCatalog,
         IChatReplySink replySink,
-        IEnumerable<string> threadValues)
+        IPerContextTurnQueue turnQueue)
     {
-        ThreadMappingCoordinator threadMappingCoordinator = new(
-            stateStore,
-            new FixedThreadReferenceGenerator(threadValues));
-
+        ThreadMappingCoordinator threadMappingCoordinator = new(stateStore);
         return new(
             new ChatCommandProcessor(stateStore, projectCatalog, threadMappingCoordinator),
-            threadMappingCoordinator,
+            turnQueue,
             stateStore,
             projectCatalog,
             replySink,
@@ -117,6 +138,17 @@ public sealed class LoggingChatUpdateIntakeTests
         public ValueTask SendMessageAsync(ChatId chatId, string message, CancellationToken cancellationToken)
         {
             Messages.Add((chatId, message));
+            return ValueTask.CompletedTask;
+        }
+    }
+
+    private sealed class RecordingTurnQueue : IPerContextTurnQueue
+    {
+        public List<QueuedTurn> EnqueuedTurns { get; } = [];
+
+        public ValueTask EnqueueAsync(QueuedTurn turn, CancellationToken cancellationToken)
+        {
+            EnqueuedTurns.Add(turn);
             return ValueTask.CompletedTask;
         }
     }

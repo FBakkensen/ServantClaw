@@ -324,19 +324,19 @@ public sealed class FileStateStore : IStateStore
 
     private sealed record ThreadMappingFileModel(
         ThreadContextFileModel Context,
-        string CurrentThread,
+        string? CurrentThread,
         IReadOnlyList<string> PreviousThreads)
     {
         public ThreadMapping ToDomain() =>
             new(
                 Context.ToDomain(),
-                new ThreadReference(CurrentThread),
+                string.IsNullOrWhiteSpace(CurrentThread) ? null : new ThreadReference(CurrentThread),
                 PreviousThreads.Select(value => new ThreadReference(value)).ToArray());
 
         public static ThreadMappingFileModel FromDomain(ThreadMapping mapping) =>
             new(
                 ThreadContextFileModel.FromDomain(mapping.Context),
-                mapping.CurrentThread.Value,
+                mapping.CurrentThread?.Value,
                 mapping.PreviousThreads.Select(thread => thread.Value).ToArray());
     }
 

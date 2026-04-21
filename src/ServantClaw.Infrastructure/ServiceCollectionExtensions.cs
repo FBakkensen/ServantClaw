@@ -21,12 +21,11 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<ChatCommandProcessor>();
         services.AddSingleton<ThreadMappingCoordinator>();
         services.AddSingleton<IProjectCatalog, FileSystemProjectCatalog>();
-        services.AddSingleton<IThreadReferenceGenerator, GuidThreadReferenceGenerator>();
         services.TryAddSingleton<IIdGenerator, GuidIdGenerator>();
         services.TryAddSingleton<IClock, SystemClock>();
         services.AddSingleton<IStateStore, FileStateStore>();
         services.AddSingleton<IChatUpdateIntake, LoggingChatUpdateIntake>();
-        services.TryAddSingleton<ITurnExecutor, NoOpTurnExecutor>();
+        services.TryAddSingleton<ITurnExecutor, CodexTurnExecutor>();
         services.AddSingleton<PerContextTurnQueue>();
         services.AddSingleton<IPerContextTurnQueue>(provider => provider.GetRequiredService<PerContextTurnQueue>());
         services.TryAddEnumerable(

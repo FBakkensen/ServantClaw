@@ -11,14 +11,14 @@ namespace ServantClaw.Infrastructure.Intake;
 
 public sealed partial class LoggingChatUpdateIntake(
     ChatCommandProcessor commandProcessor,
-    ThreadMappingCoordinator threadMappingCoordinator,
+    IPerContextTurnQueue turnQueue,
     IStateStore stateStore,
     IProjectCatalog projectCatalog,
     IChatReplySink chatReplySink,
     ILogger<LoggingChatUpdateIntake> logger) : IChatUpdateIntake
 {
     private readonly ChatCommandProcessor commandProcessor = commandProcessor ?? throw new ArgumentNullException(nameof(commandProcessor));
-    private readonly ThreadMappingCoordinator threadMappingCoordinator = threadMappingCoordinator ?? throw new ArgumentNullException(nameof(threadMappingCoordinator));
+    private readonly IPerContextTurnQueue turnQueue = turnQueue ?? throw new ArgumentNullException(nameof(turnQueue));
     private readonly IStateStore stateStore = stateStore ?? throw new ArgumentNullException(nameof(stateStore));
     private readonly IProjectCatalog projectCatalog = projectCatalog ?? throw new ArgumentNullException(nameof(projectCatalog));
     private readonly IChatReplySink chatReplySink = chatReplySink ?? throw new ArgumentNullException(nameof(chatReplySink));
@@ -66,7 +66,9 @@ public sealed partial class LoggingChatUpdateIntake(
         if (activeProject is not null)
         {
             ThreadContext context = new(update.ChatId, state!.ActiveAgent, activeProject.Value);
-            await threadMappingCoordinator.ResolveAsync(context, cancellationToken);
+            QueuedTurn turn = new(context, message.Text, DateTimeOffset.UtcNow);
+            await turnQueue.EnqueueAsync(turn, cancellationToken);
+            Log.TurnEnqueued(logger, context.ChatId.Value, context.Agent.ToString(), context.ProjectId.Value);
             return;
         }
 
@@ -110,5 +112,15 @@ public sealed partial class LoggingChatUpdateIntake(
             long chatId,
             long userId,
             int messageLength);
+
+        [LoggerMessage(
+            EventId = 202,
+            Level = LogLevel.Information,
+            Message = "Enqueued turn for chat {ChatId} agent {Agent} project {ProjectId}")]
+        public static partial void TurnEnqueued(
+            ILogger logger,
+            long chatId,
+            string agent,
+            string projectId);
     }
 }

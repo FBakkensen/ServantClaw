@@ -70,16 +70,52 @@ public sealed class DomainContractsTests
     }
 
     [Fact]
-    public void ThreadMappingRotateShouldPromoteNewCurrentThreadAndPreserveHistory()
+    public void ThreadMappingRotateShouldClearCurrentThreadAndPreserveHistory()
     {
         ThreadMapping mapping = new(
             new ThreadContext(new ChatId(42), AgentKind.Coding, new ProjectId("repo")),
             new ThreadReference("thread-1"));
 
-        ThreadMapping rotated = mapping.Rotate(new ThreadReference("thread-2"));
+        ThreadMapping rotated = mapping.Rotate();
 
-        rotated.CurrentThread.Should().Be(new ThreadReference("thread-2"));
+        rotated.CurrentThread.Should().BeNull();
         rotated.PreviousThreads.Should().ContainSingle().Which.Should().Be(new ThreadReference("thread-1"));
+    }
+
+    [Fact]
+    public void ThreadMappingRotateShouldBeIdempotentWhenCurrentThreadAlreadyNull()
+    {
+        ThreadMapping mapping = new(
+            new ThreadContext(new ChatId(42), AgentKind.Coding, new ProjectId("repo")),
+            null,
+            [new ThreadReference("thread-0")]);
+
+        ThreadMapping rotated = mapping.Rotate();
+
+        rotated.CurrentThread.Should().BeNull();
+        rotated.PreviousThreads.Should().ContainSingle().Which.Should().Be(new ThreadReference("thread-0"));
+    }
+
+    [Fact]
+    public void ThreadMappingWithCurrentThreadShouldKeepHistory()
+    {
+        ThreadMapping mapping = new(
+            new ThreadContext(new ChatId(42), AgentKind.Coding, new ProjectId("repo")),
+            null,
+            [new ThreadReference("thread-old")]);
+
+        ThreadMapping updated = mapping.WithCurrentThread(new ThreadReference("thread-new"));
+
+        updated.CurrentThread.Should().Be(new ThreadReference("thread-new"));
+        updated.PreviousThreads.Should().ContainSingle().Which.Should().Be(new ThreadReference("thread-old"));
+    }
+
+    [Fact]
+    public void ThreadMappingShouldRejectNullContext()
+    {
+        Action act = () => _ = new ThreadMapping(null!, new ThreadReference("thread-1"));
+
+        act.Should().Throw<ArgumentNullException>().Which.ParamName.Should().Be("Context");
     }
 
     [Fact]
@@ -154,7 +190,6 @@ public sealed class DomainContractsTests
         [
             typeof(IStateStore),
             typeof(IBackendClient),
-            typeof(IThreadReferenceGenerator),
             typeof(IClock),
             typeof(IIdGenerator),
             typeof(IProcessSupervisor)

@@ -16,7 +16,7 @@ public sealed class ChatCommandProcessorTests
     public async Task AgentCommandShouldPersistActiveAgentForNewChat()
     {
         InMemoryStateStore stateStore = new();
-        ChatCommandProcessor processor = CreateProcessor(stateStore, new FakeProjectCatalog(), ["thread-1"]);
+        ChatCommandProcessor processor = CreateProcessor(stateStore, new FakeProjectCatalog());
         InboundChatUpdate update = CreateUpdate(new InboundChatCommand("agent", ["coding"], "/agent coding"));
 
         ChatCommandResult result = await processor.ProcessAsync(update, CancellationToken.None);
@@ -34,7 +34,7 @@ public sealed class ChatCommandProcessorTests
             new ChatId(100),
             AgentKind.Coding,
             new AgentProjectBindings(null, new ProjectId("repo")));
-        ChatCommandProcessor processor = CreateProcessor(stateStore, new FakeProjectCatalog(), ["thread-1"]);
+        ChatCommandProcessor processor = CreateProcessor(stateStore, new FakeProjectCatalog());
         InboundChatUpdate update = CreateUpdate(new InboundChatCommand("agent", ["general"], "/agent general"));
 
         ChatCommandResult result = await processor.ProcessAsync(update, CancellationToken.None);
@@ -47,7 +47,7 @@ public sealed class ChatCommandProcessorTests
     public async Task AgentCommandShouldRejectInvalidAgentWithoutChangingState()
     {
         InMemoryStateStore stateStore = new();
-        ChatCommandProcessor processor = CreateProcessor(stateStore, new FakeProjectCatalog(), ["thread-1"]);
+        ChatCommandProcessor processor = CreateProcessor(stateStore, new FakeProjectCatalog());
         InboundChatUpdate update = CreateUpdate(new InboundChatCommand("agent", ["writer"], "/agent writer"));
 
         ChatCommandResult result = await processor.ProcessAsync(update, CancellationToken.None);
@@ -67,7 +67,7 @@ public sealed class ChatCommandProcessorTests
 
         FakeProjectCatalog projectCatalog = new();
         projectCatalog.ExistingProjects.Add("repo");
-        ChatCommandProcessor processor = CreateProcessor(stateStore, projectCatalog, ["thread-1"]);
+        ChatCommandProcessor processor = CreateProcessor(stateStore, projectCatalog);
         InboundChatUpdate update = CreateUpdate(new InboundChatCommand("project", ["coding", "repo"], "/project coding repo"));
 
         ChatCommandResult result = await processor.ProcessAsync(update, CancellationToken.None);
@@ -89,7 +89,7 @@ public sealed class ChatCommandProcessorTests
             new AgentProjectBindings(new ProjectId("docs"), null));
         stateStore.ChatStates[100] = existingState;
 
-        ChatCommandProcessor processor = CreateProcessor(stateStore, new FakeProjectCatalog(), ["thread-1"]);
+        ChatCommandProcessor processor = CreateProcessor(stateStore, new FakeProjectCatalog());
         InboundChatUpdate update = CreateUpdate(new InboundChatCommand("project", ["coding", "missing"], "/project coding missing"));
 
         ChatCommandResult result = await processor.ProcessAsync(update, CancellationToken.None);
@@ -109,14 +109,14 @@ public sealed class ChatCommandProcessorTests
 
         ThreadContext context = new(new ChatId(100), AgentKind.Coding, new ProjectId("repo"));
         stateStore.ThreadMappings[context] = new ThreadMapping(context, new ThreadReference("thread-1"));
-        ChatCommandProcessor processor = CreateProcessor(stateStore, new FakeProjectCatalog(["repo"]), ["thread-2"]);
+        ChatCommandProcessor processor = CreateProcessor(stateStore, new FakeProjectCatalog(["repo"]));
 
         ChatCommandResult result = await processor.ProcessAsync(
             CreateUpdate(new InboundChatCommand("clear", [], "/clear")),
             CancellationToken.None);
 
         result.ResponseText.Should().Be("Started a fresh thread for agent 'coding' and project 'repo'.");
-        stateStore.ThreadMappings[context].CurrentThread.Should().Be(new ThreadReference("thread-2"));
+        stateStore.ThreadMappings[context].CurrentThread.Should().BeNull();
         stateStore.ThreadMappings[context].PreviousThreads.Should().ContainSingle().Which.Should().Be(new ThreadReference("thread-1"));
     }
 
@@ -125,7 +125,7 @@ public sealed class ChatCommandProcessorTests
     {
         InMemoryStateStore stateStore = new();
         stateStore.ChatStates[100] = new ChatState(new ChatId(100), AgentKind.Coding, new AgentProjectBindings());
-        ChatCommandProcessor processor = CreateProcessor(stateStore, new FakeProjectCatalog(["docs", "repo"]), ["thread-1"]);
+        ChatCommandProcessor processor = CreateProcessor(stateStore, new FakeProjectCatalog(["docs", "repo"]));
 
         ChatCommandResult result = await processor.ProcessAsync(
             CreateUpdate(new InboundChatCommand("clear", [], "/clear")),
@@ -140,7 +140,7 @@ public sealed class ChatCommandProcessorTests
     public async Task ProcessAsyncShouldRejectUnknownCommand()
     {
         InMemoryStateStore stateStore = new();
-        ChatCommandProcessor processor = CreateProcessor(stateStore, new FakeProjectCatalog(), ["thread-1"]);
+        ChatCommandProcessor processor = CreateProcessor(stateStore, new FakeProjectCatalog());
         InboundChatUpdate update = CreateUpdate(new InboundChatCommand("whoami", [], "/whoami"));
 
         ChatCommandResult result = await processor.ProcessAsync(update, CancellationToken.None);
@@ -155,7 +155,7 @@ public sealed class ChatCommandProcessorTests
     public async Task AgentCommandShouldReturnUsageWhenArgumentsMissing()
     {
         InMemoryStateStore stateStore = new();
-        ChatCommandProcessor processor = CreateProcessor(stateStore, new FakeProjectCatalog(), ["thread-1"]);
+        ChatCommandProcessor processor = CreateProcessor(stateStore, new FakeProjectCatalog());
         InboundChatUpdate update = CreateUpdate(new InboundChatCommand("agent", [], "/agent"));
 
         ChatCommandResult result = await processor.ProcessAsync(update, CancellationToken.None);
@@ -168,7 +168,7 @@ public sealed class ChatCommandProcessorTests
     public async Task AgentCommandShouldReturnUsageWhenTooManyArguments()
     {
         InMemoryStateStore stateStore = new();
-        ChatCommandProcessor processor = CreateProcessor(stateStore, new FakeProjectCatalog(), ["thread-1"]);
+        ChatCommandProcessor processor = CreateProcessor(stateStore, new FakeProjectCatalog());
         InboundChatUpdate update = CreateUpdate(new InboundChatCommand("agent", ["coding", "extra"], "/agent coding extra"));
 
         ChatCommandResult result = await processor.ProcessAsync(update, CancellationToken.None);
@@ -186,7 +186,7 @@ public sealed class ChatCommandProcessorTests
             AgentKind.General,
             new AgentProjectBindings(new ProjectId("docs"), new ProjectId("repo")));
 
-        ChatCommandProcessor processor = CreateProcessor(stateStore, new FakeProjectCatalog(), ["thread-1"]);
+        ChatCommandProcessor processor = CreateProcessor(stateStore, new FakeProjectCatalog());
         InboundChatUpdate update = CreateUpdate(new InboundChatCommand("agent", ["coding"], "/agent coding"));
 
         ChatCommandResult result = await processor.ProcessAsync(update, CancellationToken.None);
@@ -202,7 +202,7 @@ public sealed class ChatCommandProcessorTests
     public async Task ProjectCommandShouldReturnUsageWhenArgumentsMissing()
     {
         InMemoryStateStore stateStore = new();
-        ChatCommandProcessor processor = CreateProcessor(stateStore, new FakeProjectCatalog(["repo"]), ["thread-1"]);
+        ChatCommandProcessor processor = CreateProcessor(stateStore, new FakeProjectCatalog(["repo"]));
         InboundChatUpdate update = CreateUpdate(new InboundChatCommand("project", ["coding"], "/project coding"));
 
         ChatCommandResult result = await processor.ProcessAsync(update, CancellationToken.None);
@@ -215,7 +215,7 @@ public sealed class ChatCommandProcessorTests
     public async Task ProjectCommandShouldReturnUsageWhenTooManyArguments()
     {
         InMemoryStateStore stateStore = new();
-        ChatCommandProcessor processor = CreateProcessor(stateStore, new FakeProjectCatalog(["repo"]), ["thread-1"]);
+        ChatCommandProcessor processor = CreateProcessor(stateStore, new FakeProjectCatalog(["repo"]));
         InboundChatUpdate update = CreateUpdate(
             new InboundChatCommand("project", ["coding", "repo", "extra"], "/project coding repo extra"));
 
@@ -230,7 +230,7 @@ public sealed class ChatCommandProcessorTests
     {
         InMemoryStateStore stateStore = new();
         FakeProjectCatalog projectCatalog = new(["repo"]);
-        ChatCommandProcessor processor = CreateProcessor(stateStore, projectCatalog, ["thread-1"]);
+        ChatCommandProcessor processor = CreateProcessor(stateStore, projectCatalog);
         InboundChatUpdate update = CreateUpdate(new InboundChatCommand("project", ["coding", " "], "/project coding  "));
 
         ChatCommandResult result = await processor.ProcessAsync(update, CancellationToken.None);
@@ -244,7 +244,7 @@ public sealed class ChatCommandProcessorTests
     {
         InMemoryStateStore stateStore = new();
         FakeProjectCatalog projectCatalog = new(["repo"]);
-        ChatCommandProcessor processor = CreateProcessor(stateStore, projectCatalog, ["thread-1"]);
+        ChatCommandProcessor processor = CreateProcessor(stateStore, projectCatalog);
         InboundChatUpdate update = CreateUpdate(new InboundChatCommand("project", ["writer", "repo"], "/project writer repo"));
 
         ChatCommandResult result = await processor.ProcessAsync(update, CancellationToken.None);
@@ -259,7 +259,7 @@ public sealed class ChatCommandProcessorTests
         Action act = () => _ = new ChatCommandProcessor(
             null!,
             new FakeProjectCatalog(),
-            new ThreadMappingCoordinator(new InMemoryStateStore(), new FixedThreadReferenceGenerator(["thread-1"])));
+            new ThreadMappingCoordinator(new InMemoryStateStore()));
 
         act.Should().Throw<ArgumentNullException>().Which.ParamName.Should().Be("stateStore");
     }
@@ -271,7 +271,7 @@ public sealed class ChatCommandProcessorTests
         Action act = () => _ = new ChatCommandProcessor(
             stateStore,
             null!,
-            new ThreadMappingCoordinator(stateStore, new FixedThreadReferenceGenerator(["thread-1"])));
+            new ThreadMappingCoordinator(stateStore));
 
         act.Should().Throw<ArgumentNullException>().Which.ParamName.Should().Be("projectCatalog");
     }
@@ -289,7 +289,7 @@ public sealed class ChatCommandProcessorTests
     {
         InMemoryStateStore stateStore = new();
         stateStore.ChatStates[100] = new ChatState(new ChatId(100), AgentKind.Coding, new AgentProjectBindings());
-        ChatCommandProcessor processor = CreateProcessor(stateStore, new FakeProjectCatalog(), ["thread-1"]);
+        ChatCommandProcessor processor = CreateProcessor(stateStore, new FakeProjectCatalog());
 
         ChatCommandResult result = await processor.ProcessAsync(
             CreateUpdate(new InboundChatCommand("clear", [], "/clear")),
@@ -308,7 +308,7 @@ public sealed class ChatCommandProcessorTests
             AgentKind.Coding,
             new AgentProjectBindings(null, new ProjectId("repo")));
 
-        ChatCommandProcessor processor = CreateProcessor(stateStore, new FakeProjectCatalog(["repo"]), ["thread-2"]);
+        ChatCommandProcessor processor = CreateProcessor(stateStore, new FakeProjectCatalog(["repo"]));
         InboundChatUpdate update = CreateUpdate(new InboundChatCommand("clear", ["extra"], "/clear extra"));
 
         ChatCommandResult result = await processor.ProcessAsync(update, CancellationToken.None);
@@ -322,12 +322,11 @@ public sealed class ChatCommandProcessorTests
 
     private static ChatCommandProcessor CreateProcessor(
         InMemoryStateStore stateStore,
-        FakeProjectCatalog projectCatalog,
-        IEnumerable<string> threadValues) =>
+        FakeProjectCatalog projectCatalog) =>
         new(
             stateStore,
             projectCatalog,
-            new ThreadMappingCoordinator(stateStore, new FixedThreadReferenceGenerator(threadValues)));
+            new ThreadMappingCoordinator(stateStore));
 
     private sealed class FakeProjectCatalog : IProjectCatalog
     {
