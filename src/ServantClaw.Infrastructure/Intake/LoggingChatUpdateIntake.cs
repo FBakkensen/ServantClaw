@@ -2,6 +2,7 @@ using ServantClaw.Application.Commands;
 using Microsoft.Extensions.Logging;
 using ServantClaw.Application.Intake;
 using ServantClaw.Application.Intake.Models;
+using ServantClaw.Application.Runtime;
 using ServantClaw.Domain.Common;
 using ServantClaw.Domain.Routing;
 using ServantClaw.Domain.State;
@@ -10,12 +11,14 @@ namespace ServantClaw.Infrastructure.Intake;
 
 public sealed partial class LoggingChatUpdateIntake(
     ChatCommandProcessor commandProcessor,
+    ThreadMappingCoordinator threadMappingCoordinator,
     IStateStore stateStore,
     IProjectCatalog projectCatalog,
     IChatReplySink chatReplySink,
     ILogger<LoggingChatUpdateIntake> logger) : IChatUpdateIntake
 {
     private readonly ChatCommandProcessor commandProcessor = commandProcessor ?? throw new ArgumentNullException(nameof(commandProcessor));
+    private readonly ThreadMappingCoordinator threadMappingCoordinator = threadMappingCoordinator ?? throw new ArgumentNullException(nameof(threadMappingCoordinator));
     private readonly IStateStore stateStore = stateStore ?? throw new ArgumentNullException(nameof(stateStore));
     private readonly IProjectCatalog projectCatalog = projectCatalog ?? throw new ArgumentNullException(nameof(projectCatalog));
     private readonly IChatReplySink chatReplySink = chatReplySink ?? throw new ArgumentNullException(nameof(chatReplySink));
@@ -59,8 +62,11 @@ public sealed partial class LoggingChatUpdateIntake(
             message.Text.Length);
 
         ChatState? state = await stateStore.GetChatStateAsync(update.ChatId, cancellationToken);
-        if (state?.GetActiveProject() is not null)
+        ProjectId? activeProject = state?.GetActiveProject();
+        if (activeProject is not null)
         {
+            ThreadContext context = new(update.ChatId, state!.ActiveAgent, activeProject.Value);
+            await threadMappingCoordinator.ResolveAsync(context, cancellationToken);
             return;
         }
 

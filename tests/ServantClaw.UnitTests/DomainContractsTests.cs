@@ -130,6 +130,7 @@ public sealed class DomainContractsTests
         [
             typeof(IStateStore),
             typeof(IBackendClient),
+            typeof(IThreadReferenceGenerator),
             typeof(IClock),
             typeof(IIdGenerator),
             typeof(IProcessSupervisor)

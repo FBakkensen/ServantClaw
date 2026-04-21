@@ -284,7 +284,7 @@ Verification:
 - Attempt normal messages without project selection and confirm safe refusal
 
 ## T-011 - Implement thread mapping persistence and `/clear` rotation
-Status: [ ]
+Status: [x]
 Goal: Maintain one current Codex thread per `(agent, project, chat)` and allow safe thread reset without deleting history.
 
 Scope:

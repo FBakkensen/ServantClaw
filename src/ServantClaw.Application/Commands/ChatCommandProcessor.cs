@@ -1,4 +1,5 @@
 using ServantClaw.Application.Intake.Models;
+using ServantClaw.Application.Runtime;
 using ServantClaw.Domain.Agents;
 using ServantClaw.Domain.Common;
 using ServantClaw.Domain.Routing;
@@ -6,10 +7,14 @@ using ServantClaw.Domain.State;
 
 namespace ServantClaw.Application.Commands;
 
-public sealed class ChatCommandProcessor(IStateStore stateStore, IProjectCatalog projectCatalog)
+public sealed class ChatCommandProcessor(
+    IStateStore stateStore,
+    IProjectCatalog projectCatalog,
+    ThreadMappingCoordinator threadMappingCoordinator)
 {
     private readonly IStateStore stateStore = stateStore ?? throw new ArgumentNullException(nameof(stateStore));
     private readonly IProjectCatalog projectCatalog = projectCatalog ?? throw new ArgumentNullException(nameof(projectCatalog));
+    private readonly ThreadMappingCoordinator threadMappingCoordinator = threadMappingCoordinator ?? throw new ArgumentNullException(nameof(threadMappingCoordinator));
 
     public async ValueTask<ChatCommandResult> ProcessAsync(InboundChatUpdate update, CancellationToken cancellationToken)
     {
@@ -25,6 +30,7 @@ public sealed class ChatCommandProcessor(IStateStore stateStore, IProjectCatalog
         {
             "agent" => await ProcessAgentCommandAsync(update, command, cancellationToken),
             "project" => await ProcessProjectCommandAsync(update, command, cancellationToken),
+            "clear" => await ProcessClearCommandAsync(update, command, cancellationToken),
             _ => new ChatCommandResult($"Unsupported command '/{command.Name}'.")
         };
     }
@@ -93,9 +99,45 @@ public sealed class ChatCommandProcessor(IStateStore stateStore, IProjectCatalog
             $"Active agent set to '{ToAgentId(agent)}'. Active project set to '{projectId.Value}'.");
     }
 
+    private async ValueTask<ChatCommandResult> ProcessClearCommandAsync(
+        InboundChatUpdate update,
+        InboundChatCommand command,
+        CancellationToken cancellationToken)
+    {
+        if (command.Arguments.Count != 0)
+        {
+            return new ChatCommandResult("Usage: /clear");
+        }
+
+        ChatState currentState = await GetOrCreateChatStateAsync(update.ChatId, cancellationToken);
+        ProjectId? activeProject = currentState.GetActiveProject();
+        if (activeProject is null)
+        {
+            return new ChatCommandResult(await BuildMissingProjectMessageAsync(currentState.ActiveAgent, cancellationToken));
+        }
+
+        ProjectId selectedProject = activeProject.Value;
+        ThreadContext context = new(update.ChatId, currentState.ActiveAgent, selectedProject);
+        await threadMappingCoordinator.RotateAsync(context, cancellationToken);
+
+        return new ChatCommandResult(
+            $"Started a fresh thread for agent '{ToAgentId(currentState.ActiveAgent)}' and project '{selectedProject.Value}'.");
+    }
+
     private async ValueTask<ChatState> GetOrCreateChatStateAsync(ChatId chatId, CancellationToken cancellationToken) =>
         await stateStore.GetChatStateAsync(chatId, cancellationToken)
         ?? new ChatState(chatId, AgentKind.General, new AgentProjectBindings());
+
+    private async ValueTask<string> BuildMissingProjectMessageAsync(AgentKind activeAgent, CancellationToken cancellationToken)
+    {
+        IReadOnlyCollection<ProjectId> availableProjects = await projectCatalog.ListProjectsAsync(cancellationToken);
+        string availableProjectsText = availableProjects.Count == 0
+            ? "No projects are currently available."
+            : $"Available projects: {string.Join(", ", availableProjects.Select(projectId => projectId.Value))}.";
+
+        return
+            $"No active project is selected for agent '{ToAgentId(activeAgent)}'. Use /project <agent-id> <project-id> before sending normal messages. {availableProjectsText}";
+    }
 
     private static bool TryParseAgent(string value, out AgentKind agent)
     {

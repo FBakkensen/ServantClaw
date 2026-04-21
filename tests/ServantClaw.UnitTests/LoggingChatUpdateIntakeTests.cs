@@ -2,13 +2,13 @@ using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using ServantClaw.Application.Commands;
 using ServantClaw.Application.Intake.Models;
+using ServantClaw.Application.Runtime;
 using ServantClaw.Domain.Agents;
-using ServantClaw.Domain.Approvals;
 using ServantClaw.Domain.Common;
-using ServantClaw.Domain.Configuration;
 using ServantClaw.Domain.Routing;
 using ServantClaw.Domain.State;
 using ServantClaw.Infrastructure.Intake;
+using ServantClaw.UnitTests.Testing;
 using Xunit;
 
 namespace ServantClaw.UnitTests;
@@ -62,18 +62,34 @@ public sealed class LoggingChatUpdateIntakeTests
             CancellationToken.None);
 
         replySink.Messages.Should().BeEmpty();
+        ThreadContext context = new(new ChatId(100), AgentKind.Coding, new ProjectId("repo"));
+        stateStore.ThreadMappings[context].CurrentThread.Should().Be(new ThreadReference("thread-1"));
     }
 
     private static LoggingChatUpdateIntake CreateIntake(
         IStateStore stateStore,
         IProjectCatalog projectCatalog,
         IChatReplySink replySink) =>
-        new(
-            new ChatCommandProcessor(stateStore, projectCatalog),
+        CreateIntake(stateStore, projectCatalog, replySink, ["thread-1", "thread-2"]);
+
+    private static LoggingChatUpdateIntake CreateIntake(
+        IStateStore stateStore,
+        IProjectCatalog projectCatalog,
+        IChatReplySink replySink,
+        IEnumerable<string> threadValues)
+    {
+        ThreadMappingCoordinator threadMappingCoordinator = new(
+            stateStore,
+            new FixedThreadReferenceGenerator(threadValues));
+
+        return new(
+            new ChatCommandProcessor(stateStore, projectCatalog, threadMappingCoordinator),
+            threadMappingCoordinator,
             stateStore,
             projectCatalog,
             replySink,
             NullLogger<LoggingChatUpdateIntake>.Instance);
+    }
 
     private sealed class FakeProjectCatalog : IProjectCatalog
     {
@@ -103,37 +119,5 @@ public sealed class LoggingChatUpdateIntakeTests
             Messages.Add((chatId, message));
             return ValueTask.CompletedTask;
         }
-    }
-
-    private sealed class InMemoryStateStore : IStateStore
-    {
-        public Dictionary<long, ChatState> ChatStates { get; } = [];
-
-        public ValueTask<ChatState?> GetChatStateAsync(ChatId chatId, CancellationToken cancellationToken) =>
-            ValueTask.FromResult(ChatStates.TryGetValue(chatId.Value, out ChatState? state) ? state : null);
-
-        public ValueTask SaveChatStateAsync(ChatState chatState, CancellationToken cancellationToken)
-        {
-            ChatStates[chatState.ChatId.Value] = chatState;
-            return ValueTask.CompletedTask;
-        }
-
-        public ValueTask<ThreadMapping?> GetThreadMappingAsync(ThreadContext context, CancellationToken cancellationToken) =>
-            ValueTask.FromResult<ThreadMapping?>(null);
-
-        public ValueTask SaveThreadMappingAsync(ThreadMapping threadMapping, CancellationToken cancellationToken) =>
-            ValueTask.CompletedTask;
-
-        public ValueTask<ApprovalRecord?> GetApprovalAsync(ApprovalId approvalId, CancellationToken cancellationToken) =>
-            ValueTask.FromResult<ApprovalRecord?>(null);
-
-        public ValueTask<IReadOnlyCollection<ApprovalRecord>> GetPendingApprovalsAsync(CancellationToken cancellationToken) =>
-            ValueTask.FromResult<IReadOnlyCollection<ApprovalRecord>>([]);
-
-        public ValueTask SaveApprovalAsync(ApprovalRecord approvalRecord, CancellationToken cancellationToken) =>
-            ValueTask.CompletedTask;
-
-        public ValueTask<OwnerConfiguration?> GetOwnerConfigurationAsync(CancellationToken cancellationToken) =>
-            ValueTask.FromResult<OwnerConfiguration?>(null);
     }
 }
