@@ -1,12 +1,11 @@
 using FluentAssertions;
 using ServantClaw.Application.Commands;
 using ServantClaw.Application.Intake.Models;
+using ServantClaw.Application.Runtime;
 using ServantClaw.Domain.Agents;
-using ServantClaw.Domain.Approvals;
 using ServantClaw.Domain.Common;
-using ServantClaw.Domain.Configuration;
 using ServantClaw.Domain.Routing;
-using ServantClaw.Domain.State;
+using ServantClaw.UnitTests.Testing;
 using Xunit;
 
 namespace ServantClaw.UnitTests;
@@ -17,7 +16,7 @@ public sealed class ChatCommandProcessorTests
     public async Task AgentCommandShouldPersistActiveAgentForNewChat()
     {
         InMemoryStateStore stateStore = new();
-        ChatCommandProcessor processor = new(stateStore, new FakeProjectCatalog());
+        ChatCommandProcessor processor = CreateProcessor(stateStore, new FakeProjectCatalog(), ["thread-1"]);
         InboundChatUpdate update = CreateUpdate(new InboundChatCommand("agent", ["coding"], "/agent coding"));
 
         ChatCommandResult result = await processor.ProcessAsync(update, CancellationToken.None);
@@ -31,7 +30,7 @@ public sealed class ChatCommandProcessorTests
     public async Task AgentCommandShouldRejectInvalidAgentWithoutChangingState()
     {
         InMemoryStateStore stateStore = new();
-        ChatCommandProcessor processor = new(stateStore, new FakeProjectCatalog());
+        ChatCommandProcessor processor = CreateProcessor(stateStore, new FakeProjectCatalog(), ["thread-1"]);
         InboundChatUpdate update = CreateUpdate(new InboundChatCommand("agent", ["writer"], "/agent writer"));
 
         ChatCommandResult result = await processor.ProcessAsync(update, CancellationToken.None);
@@ -51,7 +50,7 @@ public sealed class ChatCommandProcessorTests
 
         FakeProjectCatalog projectCatalog = new();
         projectCatalog.ExistingProjects.Add("repo");
-        ChatCommandProcessor processor = new(stateStore, projectCatalog);
+        ChatCommandProcessor processor = CreateProcessor(stateStore, projectCatalog, ["thread-1"]);
         InboundChatUpdate update = CreateUpdate(new InboundChatCommand("project", ["coding", "repo"], "/project coding repo"));
 
         ChatCommandResult result = await processor.ProcessAsync(update, CancellationToken.None);
@@ -73,7 +72,7 @@ public sealed class ChatCommandProcessorTests
             new AgentProjectBindings(new ProjectId("docs"), null));
         stateStore.ChatStates[100] = existingState;
 
-        ChatCommandProcessor processor = new(stateStore, new FakeProjectCatalog());
+        ChatCommandProcessor processor = CreateProcessor(stateStore, new FakeProjectCatalog(), ["thread-1"]);
         InboundChatUpdate update = CreateUpdate(new InboundChatCommand("project", ["coding", "missing"], "/project coding missing"));
 
         ChatCommandResult result = await processor.ProcessAsync(update, CancellationToken.None);
@@ -82,11 +81,70 @@ public sealed class ChatCommandProcessorTests
         stateStore.ChatStates[100].Should().Be(existingState);
     }
 
+    [Fact]
+    public async Task ClearCommandShouldRotateCurrentThreadAndPreserveHistory()
+    {
+        InMemoryStateStore stateStore = new();
+        stateStore.ChatStates[100] = new ChatState(
+            new ChatId(100),
+            AgentKind.Coding,
+            new AgentProjectBindings(null, new ProjectId("repo")));
+
+        ThreadContext context = new(new ChatId(100), AgentKind.Coding, new ProjectId("repo"));
+        stateStore.ThreadMappings[context] = new ThreadMapping(context, new ThreadReference("thread-1"));
+        ChatCommandProcessor processor = CreateProcessor(stateStore, new FakeProjectCatalog(["repo"]), ["thread-2"]);
+
+        ChatCommandResult result = await processor.ProcessAsync(
+            CreateUpdate(new InboundChatCommand("clear", [], "/clear")),
+            CancellationToken.None);
+
+        result.ResponseText.Should().Be("Started a fresh thread for agent 'coding' and project 'repo'.");
+        stateStore.ThreadMappings[context].CurrentThread.Should().Be(new ThreadReference("thread-2"));
+        stateStore.ThreadMappings[context].PreviousThreads.Should().ContainSingle().Which.Should().Be(new ThreadReference("thread-1"));
+    }
+
+    [Fact]
+    public async Task ClearCommandShouldRefuseWhenActiveProjectIsMissing()
+    {
+        InMemoryStateStore stateStore = new();
+        stateStore.ChatStates[100] = new ChatState(new ChatId(100), AgentKind.Coding, new AgentProjectBindings());
+        ChatCommandProcessor processor = CreateProcessor(stateStore, new FakeProjectCatalog(["docs", "repo"]), ["thread-1"]);
+
+        ChatCommandResult result = await processor.ProcessAsync(
+            CreateUpdate(new InboundChatCommand("clear", [], "/clear")),
+            CancellationToken.None);
+
+        result.ResponseText.Should().Be(
+            "No active project is selected for agent 'coding'. Use /project <agent-id> <project-id> before sending normal messages. Available projects: docs, repo.");
+        stateStore.ThreadMappings.Should().BeEmpty();
+    }
+
     private static InboundChatUpdate CreateUpdate(InboundChatInput input) =>
         new(new ChatId(100), new UserId(42), "approved-owner", DateTimeOffset.UtcNow, input);
 
+    private static ChatCommandProcessor CreateProcessor(
+        InMemoryStateStore stateStore,
+        FakeProjectCatalog projectCatalog,
+        IEnumerable<string> threadValues) =>
+        new(
+            stateStore,
+            projectCatalog,
+            new ThreadMappingCoordinator(stateStore, new FixedThreadReferenceGenerator(threadValues)));
+
     private sealed class FakeProjectCatalog : IProjectCatalog
     {
+        public FakeProjectCatalog()
+        {
+        }
+
+        public FakeProjectCatalog(IEnumerable<string> existingProjects)
+        {
+            foreach (string existingProject in existingProjects)
+            {
+                ExistingProjects.Add(existingProject);
+            }
+        }
+
         public HashSet<string> ExistingProjects { get; } = [];
 
         public ValueTask<bool> ProjectExistsAsync(ProjectId projectId, CancellationToken cancellationToken) =>
@@ -98,37 +156,5 @@ public sealed class ChatCommandProcessorTests
                     .OrderBy(projectId => projectId, StringComparer.OrdinalIgnoreCase)
                     .Select(projectId => new ProjectId(projectId))
                     .ToArray());
-    }
-
-    private sealed class InMemoryStateStore : IStateStore
-    {
-        public Dictionary<long, ChatState> ChatStates { get; } = [];
-
-        public ValueTask<ChatState?> GetChatStateAsync(ChatId chatId, CancellationToken cancellationToken) =>
-            ValueTask.FromResult(ChatStates.TryGetValue(chatId.Value, out ChatState? state) ? state : null);
-
-        public ValueTask SaveChatStateAsync(ChatState chatState, CancellationToken cancellationToken)
-        {
-            ChatStates[chatState.ChatId.Value] = chatState;
-            return ValueTask.CompletedTask;
-        }
-
-        public ValueTask<ThreadMapping?> GetThreadMappingAsync(ThreadContext context, CancellationToken cancellationToken) =>
-            ValueTask.FromResult<ThreadMapping?>(null);
-
-        public ValueTask SaveThreadMappingAsync(ThreadMapping threadMapping, CancellationToken cancellationToken) =>
-            ValueTask.CompletedTask;
-
-        public ValueTask<ApprovalRecord?> GetApprovalAsync(ApprovalId approvalId, CancellationToken cancellationToken) =>
-            ValueTask.FromResult<ApprovalRecord?>(null);
-
-        public ValueTask<IReadOnlyCollection<ApprovalRecord>> GetPendingApprovalsAsync(CancellationToken cancellationToken) =>
-            ValueTask.FromResult<IReadOnlyCollection<ApprovalRecord>>([]);
-
-        public ValueTask SaveApprovalAsync(ApprovalRecord approvalRecord, CancellationToken cancellationToken) =>
-            ValueTask.CompletedTask;
-
-        public ValueTask<OwnerConfiguration?> GetOwnerConfigurationAsync(CancellationToken cancellationToken) =>
-            ValueTask.FromResult<OwnerConfiguration?>(null);
     }
 }

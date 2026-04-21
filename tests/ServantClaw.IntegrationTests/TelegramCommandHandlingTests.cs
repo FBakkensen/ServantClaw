@@ -81,6 +81,64 @@ public sealed class TelegramCommandHandlingTests
             "No active project is selected for agent 'coding'. Use /project <agent-id> <project-id> before sending normal messages. Available projects: docs, repo.");
     }
 
+    [Fact]
+    public async Task TextMessageShouldCreateThreadMappingForBoundContext()
+    {
+        FakeTelegramPollingClient pollingClient = new();
+        await using TestHostContext context = await CreateStartedHost(pollingClient);
+        IStateStore stateStore = context.Host.Services.GetRequiredService<IStateStore>();
+        ChatState state = new(
+            new ChatId(100),
+            AgentKind.Coding,
+            new AgentProjectBindings(null, new ProjectId("repo")));
+        await stateStore.SaveChatStateAsync(state, CancellationToken.None);
+
+        pollingClient.EnqueueBatch(
+            new TelegramIncomingUpdate(
+                1,
+                new TelegramIncomingMessage(100, 42, "approved-owner", DateTimeOffset.UtcNow, "hello")));
+
+        await Task.Delay(200);
+
+        ThreadMapping? mapping = await stateStore.GetThreadMappingAsync(
+            new ThreadContext(new ChatId(100), AgentKind.Coding, new ProjectId("repo")),
+            CancellationToken.None);
+
+        mapping.Should().NotBeNull();
+        mapping!.CurrentThread.Value.Should().NotBeNullOrWhiteSpace();
+        mapping.PreviousThreads.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task ClearCommandShouldRotatePersistedThreadMapping()
+    {
+        FakeTelegramPollingClient pollingClient = new();
+        await using TestHostContext context = await CreateStartedHost(pollingClient);
+        IStateStore stateStore = context.Host.Services.GetRequiredService<IStateStore>();
+        ChatState state = new(
+            new ChatId(100),
+            AgentKind.Coding,
+            new AgentProjectBindings(null, new ProjectId("repo")));
+        ThreadContext threadContext = new(new ChatId(100), AgentKind.Coding, new ProjectId("repo"));
+        ThreadMapping originalMapping = new(threadContext, new ThreadReference("thread-1"));
+
+        await stateStore.SaveChatStateAsync(state, CancellationToken.None);
+        await stateStore.SaveThreadMappingAsync(originalMapping, CancellationToken.None);
+
+        pollingClient.EnqueueBatch(
+            new TelegramIncomingUpdate(
+                1,
+                new TelegramIncomingMessage(100, 42, "approved-owner", DateTimeOffset.UtcNow, "/clear")));
+
+        SentTelegramMessage reply = await pollingClient.DequeueSentMessageAsync(TimeSpan.FromSeconds(2));
+        ThreadMapping? updatedMapping = await stateStore.GetThreadMappingAsync(threadContext, CancellationToken.None);
+
+        reply.Text.Should().Be("Started a fresh thread for agent 'coding' and project 'repo'.");
+        updatedMapping.Should().NotBeNull();
+        updatedMapping!.CurrentThread.Should().NotBe(new ThreadReference("thread-1"));
+        updatedMapping.PreviousThreads.Should().ContainSingle().Which.Should().Be(new ThreadReference("thread-1"));
+    }
+
     private static async ValueTask<TestHostContext> CreateStartedHost(FakeTelegramPollingClient pollingClient)
     {
         TestHostContext context = CreateHost(pollingClient);
@@ -154,7 +212,7 @@ public sealed class TelegramCommandHandlingTests
 
         private static async Task DeleteDirectoryWithRetryAsync(string path)
         {
-            const int maxAttempts = 5;
+            const int maxAttempts = 10;
 
             for (int attempt = 1; attempt <= maxAttempts; attempt++)
             {
@@ -163,13 +221,23 @@ public sealed class TelegramCommandHandlingTests
                     Directory.Delete(path, recursive: true);
                     return;
                 }
-                catch (IOException) when (attempt < maxAttempts)
+                catch (IOException)
                 {
-                    await Task.Delay(100);
+                    if (attempt == maxAttempts)
+                    {
+                        return;
+                    }
+
+                    await Task.Delay(250);
                 }
-                catch (UnauthorizedAccessException) when (attempt < maxAttempts)
+                catch (UnauthorizedAccessException)
                 {
-                    await Task.Delay(100);
+                    if (attempt == maxAttempts)
+                    {
+                        return;
+                    }
+
+                    await Task.Delay(250);
                 }
             }
         }
