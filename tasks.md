@@ -375,7 +375,7 @@ Verification:
 - Simulate concurrent messages across shared and separate contexts and confirm ordering rules
 
 ## T-013 - Implement the Codex backend abstraction and process supervisor
-Status: [ ]
+Status: [x]
 Goal: Introduce the internal backend interface and supervise one long-lived shared `codex app-server` process.
 
 Scope:
