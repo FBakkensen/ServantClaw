@@ -30,6 +30,7 @@ public sealed partial class BackendProcessSupervisor :
     private readonly IBackendProcessLauncher launcher;
     private readonly IBackendRestartDelay restartDelay;
     private readonly IClock clock;
+    private readonly IBackendSessionPublisher sessionPublisher;
     private readonly ILogger<BackendProcessSupervisor> logger;
 
     private readonly Lock gate = new();
@@ -43,12 +44,14 @@ public sealed partial class BackendProcessSupervisor :
         IBackendProcessLauncher launcher,
         IBackendRestartDelay restartDelay,
         IClock clock,
+        IBackendSessionPublisher sessionPublisher,
         ILogger<BackendProcessSupervisor> logger)
     {
         this.configuration = configuration ?? throw new ArgumentNullException(nameof(configuration));
         this.launcher = launcher ?? throw new ArgumentNullException(nameof(launcher));
         this.restartDelay = restartDelay ?? throw new ArgumentNullException(nameof(restartDelay));
         this.clock = clock ?? throw new ArgumentNullException(nameof(clock));
+        this.sessionPublisher = sessionPublisher ?? throw new ArgumentNullException(nameof(sessionPublisher));
         this.logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
@@ -135,11 +138,21 @@ public sealed partial class BackendProcessSupervisor :
                 shutdownToken.ThrowIfCancellationRequested();
 
                 IBackendProcessHandle? handle = null;
+                CancellationTokenSource? sessionSource = null;
+                bool sessionPublished = false;
                 DateTimeOffset startTime = clock.UtcNow;
 
                 try
                 {
                     handle = launcher.Launch(configuration);
+                    sessionSource = new CancellationTokenSource();
+                    BackendSession session = new(
+                        handle.StandardInput,
+                        handle.StandardOutput,
+                        handle.StandardError,
+                        sessionSource.Token);
+                    sessionPublisher.Publish(session);
+                    sessionPublished = true;
                     SetHealth(RunningHealth);
                     Log.BackendStarted(logger);
 
@@ -168,6 +181,24 @@ public sealed partial class BackendProcessSupervisor :
                 }
                 finally
                 {
+                    if (sessionPublished)
+                    {
+                        sessionPublisher.Retract();
+                    }
+
+                    if (sessionSource is not null)
+                    {
+                        try
+                        {
+                            await sessionSource.CancelAsync();
+                        }
+                        catch (ObjectDisposedException)
+                        {
+                        }
+
+                        sessionSource.Dispose();
+                    }
+
                     if (handle is not null)
                     {
                         try

@@ -22,13 +22,118 @@ public sealed class BackendProcessSupervisorTests
         IBackendProcessLauncher launcher,
         IBackendRestartDelay delay,
         IClock clock,
+        IBackendSessionPublisher? sessionPublisher = null,
         ILogger<BackendProcessSupervisor>? logger = null) =>
         new(
             CreateConfig(),
             launcher,
             delay,
             clock,
+            sessionPublisher ?? new RecordingSessionPublisher(),
             logger ?? NullLogger<BackendProcessSupervisor>.Instance);
+
+    [Fact]
+    public async Task SuccessfulLaunchShouldPublishSessionWithHandleStreams()
+    {
+        FakeBackendProcessLauncher launcher = new();
+        FakeBackendRestartDelay delay = new();
+        FakeClock clock = new();
+        FakeBackendProcessHandle handle = new();
+        RecordingSessionPublisher publisher = new();
+        launcher.EnqueueHandle(handle);
+
+        BackendProcessSupervisor supervisor = CreateSupervisor(launcher, delay, clock, publisher);
+
+        await supervisor.StartAsync(CancellationToken.None);
+        await launcher.WaitForLaunchCount(1, TestTimeout);
+        await WaitForHealth(supervisor, h => h.IsReady, TestTimeout);
+
+        publisher.PublishCount.Should().Be(1);
+        BackendSession published = publisher.Published[0];
+        published.StandardInput.Should().BeSameAs(handle.StandardInput);
+        published.StandardOutput.Should().BeSameAs(handle.StandardOutput);
+        published.StandardError.Should().BeSameAs(handle.StandardError);
+        published.SessionLifetime.IsCancellationRequested.Should().BeFalse();
+
+        handle.SignalExit(0);
+        await supervisor.StopAsync(CancellationToken.None);
+    }
+
+    [Fact]
+    public async Task ProcessExitShouldRetractSessionAndCancelSessionLifetime()
+    {
+        FakeBackendProcessLauncher launcher = new();
+        BlockingFakeBackendRestartDelay delay = new();
+        FakeClock clock = new();
+        FakeBackendProcessHandle first = new();
+        FakeBackendProcessHandle second = new();
+        RecordingSessionPublisher publisher = new();
+        launcher.EnqueueHandle(first);
+        launcher.EnqueueHandle(second);
+
+        BackendProcessSupervisor supervisor = CreateSupervisor(launcher, delay, clock, publisher);
+
+        await supervisor.StartAsync(CancellationToken.None);
+        await launcher.WaitForLaunchCount(1, TestTimeout);
+        BackendSession firstSession = publisher.Published[0];
+
+        first.SignalExit(137);
+        await delay.WaitForFirstInvocation(TestTimeout);
+
+        publisher.RetractCount.Should().Be(1);
+        firstSession.SessionLifetime.IsCancellationRequested.Should().BeTrue();
+
+        delay.Release();
+        await launcher.WaitForLaunchCount(2, TestTimeout);
+
+        second.SignalExit(0);
+        await supervisor.StopAsync(CancellationToken.None);
+    }
+
+    [Fact]
+    public async Task LauncherFailureShouldNotPublishAnySession()
+    {
+        FakeBackendProcessLauncher launcher = new();
+        FakeBackendRestartDelay delay = new();
+        FakeClock clock = new();
+        FakeBackendProcessHandle recoveryHandle = new();
+        RecordingSessionPublisher publisher = new();
+        launcher.EnqueueException(new InvalidOperationException("executable missing"));
+        launcher.EnqueueHandle(recoveryHandle);
+
+        BackendProcessSupervisor supervisor = CreateSupervisor(launcher, delay, clock, publisher);
+
+        await supervisor.StartAsync(CancellationToken.None);
+        await launcher.WaitForLaunchCount(2, TestTimeout);
+        await WaitForHealth(supervisor, h => h.IsReady, TestTimeout);
+
+        publisher.PublishCount.Should().Be(1, "only the recovery launch should have produced a session");
+        publisher.RetractCount.Should().Be(0);
+
+        recoveryHandle.SignalExit(0);
+        await supervisor.StopAsync(CancellationToken.None);
+    }
+
+    [Fact]
+    public async Task StopAsyncShouldRetractSessionDuringShutdown()
+    {
+        FakeBackendProcessLauncher launcher = new();
+        FakeBackendRestartDelay delay = new();
+        FakeClock clock = new();
+        FakeBackendProcessHandle handle = new();
+        RecordingSessionPublisher publisher = new();
+        launcher.EnqueueHandle(handle);
+
+        BackendProcessSupervisor supervisor = CreateSupervisor(launcher, delay, clock, publisher);
+
+        await supervisor.StartAsync(CancellationToken.None);
+        await launcher.WaitForLaunchCount(1, TestTimeout);
+
+        await supervisor.StopAsync(CancellationToken.None);
+
+        publisher.RetractCount.Should().BeGreaterThanOrEqualTo(1);
+        publisher.Published[0].SessionLifetime.IsCancellationRequested.Should().BeTrue();
+    }
 
     [Fact]
     public async Task StartAsyncShouldLaunchBackendAndReportHealthy()
@@ -339,7 +444,7 @@ public sealed class BackendProcessSupervisorTests
         launcher.EnqueueException(new InvalidOperationException("boom"));
         launcher.EnqueueHandle(recoveryHandle);
 
-        BackendProcessSupervisor supervisor = CreateSupervisor(launcher, delay, clock, logger);
+        BackendProcessSupervisor supervisor = CreateSupervisor(launcher, delay, clock, logger: logger);
 
         await supervisor.StartAsync(CancellationToken.None);
         await launcher.WaitForLaunchCount(2, TestTimeout);
@@ -363,6 +468,7 @@ public sealed class BackendProcessSupervisorTests
             new FakeBackendProcessLauncher(),
             new FakeBackendRestartDelay(),
             new FakeClock(),
+            new RecordingSessionPublisher(),
             NullLogger<BackendProcessSupervisor>.Instance);
 
         act.Should().Throw<ArgumentNullException>().Which.ParamName.Should().Be("configuration");
@@ -376,6 +482,7 @@ public sealed class BackendProcessSupervisorTests
             null!,
             new FakeBackendRestartDelay(),
             new FakeClock(),
+            new RecordingSessionPublisher(),
             NullLogger<BackendProcessSupervisor>.Instance);
 
         act.Should().Throw<ArgumentNullException>().Which.ParamName.Should().Be("launcher");
@@ -389,6 +496,7 @@ public sealed class BackendProcessSupervisorTests
             new FakeBackendProcessLauncher(),
             null!,
             new FakeClock(),
+            new RecordingSessionPublisher(),
             NullLogger<BackendProcessSupervisor>.Instance);
 
         act.Should().Throw<ArgumentNullException>().Which.ParamName.Should().Be("restartDelay");
@@ -402,9 +510,24 @@ public sealed class BackendProcessSupervisorTests
             new FakeBackendProcessLauncher(),
             new FakeBackendRestartDelay(),
             null!,
+            new RecordingSessionPublisher(),
             NullLogger<BackendProcessSupervisor>.Instance);
 
         act.Should().Throw<ArgumentNullException>().Which.ParamName.Should().Be("clock");
+    }
+
+    [Fact]
+    public void ConstructorShouldRejectNullSessionPublisher()
+    {
+        Action act = () => _ = new BackendProcessSupervisor(
+            CreateConfig(),
+            new FakeBackendProcessLauncher(),
+            new FakeBackendRestartDelay(),
+            new FakeClock(),
+            null!,
+            NullLogger<BackendProcessSupervisor>.Instance);
+
+        act.Should().Throw<ArgumentNullException>().Which.ParamName.Should().Be("sessionPublisher");
     }
 
     [Fact]
@@ -415,6 +538,7 @@ public sealed class BackendProcessSupervisorTests
             new FakeBackendProcessLauncher(),
             new FakeBackendRestartDelay(),
             new FakeClock(),
+            new RecordingSessionPublisher(),
             null!);
 
         act.Should().Throw<ArgumentNullException>().Which.ParamName.Should().Be("logger");
@@ -577,6 +701,12 @@ public sealed class BackendProcessSupervisorTests
 
         public bool Disposed { get; private set; }
 
+        public Stream StandardInput { get; } = new MemoryStream();
+
+        public Stream StandardOutput { get; } = new MemoryStream();
+
+        public Stream StandardError { get; } = new MemoryStream();
+
         public async Task WaitForExitAsync(CancellationToken cancellationToken)
         {
             await using CancellationTokenRegistration registration = cancellationToken.Register(() =>
@@ -615,11 +745,49 @@ public sealed class BackendProcessSupervisorTests
 
         public int? ExitCode { get; }
 
+        public Stream StandardInput { get; } = new MemoryStream();
+
+        public Stream StandardOutput { get; } = new MemoryStream();
+
+        public Stream StandardError { get; } = new MemoryStream();
+
         public Task WaitForExitAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 
         public ValueTask StopAsync(TimeSpan gracefulTimeout, CancellationToken cancellationToken) =>
             ValueTask.CompletedTask;
 
         public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+    }
+
+    private sealed class RecordingSessionPublisher : IBackendSessionPublisher
+    {
+        private readonly List<BackendSession> publishedSessions = [];
+        private readonly Lock gate = new();
+
+        public int PublishCount { get; private set; }
+
+        public int RetractCount { get; private set; }
+
+        public IReadOnlyList<BackendSession> Published
+        {
+            get { lock (gate) return [.. publishedSessions]; }
+        }
+
+        public void Publish(BackendSession session)
+        {
+            lock (gate)
+            {
+                publishedSessions.Add(session);
+                PublishCount++;
+            }
+        }
+
+        public void Retract()
+        {
+            lock (gate)
+            {
+                RetractCount++;
+            }
+        }
     }
 }

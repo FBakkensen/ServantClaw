@@ -19,6 +19,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\..\src\ServantClaw.Codex\ServantClaw.Codex.csproj" />
     <ProjectReference Include="..\..\src\ServantClaw.Host\ServantClaw.Host.csproj" />
     <ProjectReference Include="..\..\src\ServantClaw.Infrastructure\ServantClaw.Infrastructure.csproj" />
   </ItemGroup>

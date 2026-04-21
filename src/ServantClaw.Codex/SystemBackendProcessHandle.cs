@@ -30,6 +30,12 @@ public sealed class SystemBackendProcessHandle : IBackendProcessHandle
         }
     }
 
+    public Stream StandardInput => process.StandardInput.BaseStream;
+
+    public Stream StandardOutput => process.StandardOutput.BaseStream;
+
+    public Stream StandardError => process.StandardError.BaseStream;
+
     public Task WaitForExitAsync(CancellationToken cancellationToken) =>
         process.WaitForExitAsync(cancellationToken);
 
