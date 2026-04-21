@@ -312,6 +312,42 @@ Verification:
 - Run `dotnet test`
 - Execute repeated requests in multiple contexts and confirm separate persisted thread mappings
 
+## T-025 - Scaffold Stryker.NET and wire advisory mutation-check into the implementation workflow
+Status: [x]
+Goal: Make mutation testing runnable in this repo, prove the scaffold on already-implemented safety slices, and add an advisory mutation-check step to `/implement-next-task` so every subsequent safety-critical change is mutation-checked from the moment it lands.
+
+Scope:
+- Add a repo-local .NET tool manifest that pins `dotnet-stryker`
+- Add per-project `stryker-config.json` for `ServantClaw.Domain` and `ServantClaw.Application`
+- Run a one-time narrow baseline (no `--since`) against the currently-implemented safety slices: thread mapping rotation, chat-command agent/project state, startup configuration validation
+- Add unit tests for obvious gaps the baseline surfaces; document remaining surviving mutants as equivalent or low-value with short justifications
+- Extend `/implement-next-task` with a new advisory mutation-check step and a `references/mutation-check-protocol.md` reference file
+- Document the command, the config layout, and the surviving-mutant categorization rule in repo guidance where appropriate
+
+Depends on:
+- T-002
+- T-004
+- T-009
+- T-011
+
+Source:
+- Design - Mutation testing
+- Design - Implementation Sequence 12
+
+Definition of Done:
+- `dotnet dotnet-stryker` runs from both `src/ServantClaw.Domain` and `src/ServantClaw.Application` using the committed per-project configs
+- The tool manifest and configs are committed; no machine-specific paths leak in
+- Baseline mutation run on the three listed slices completes and each surviving mutant is accounted for (test added, equivalent, or low-value with justification)
+- `/implement-next-task` includes the advisory mutation-check step and references `mutation-check-protocol.md`
+- Running the mutation check on a diff that touches only non-safety-critical code is a no-op and reports that clearly
+- Running the mutation check on a diff that touches Domain or Application invokes Stryker with `--since:<base>` and surfaces surviving mutants in the implementation summary
+
+Verification:
+- Run `dotnet dotnet-stryker` from `src/ServantClaw.Domain` and from `src/ServantClaw.Application` with the committed configs and confirm both complete and emit HTML + cleartext reports
+- Run `dotnet build` and `dotnet test` to confirm no regressions from added tests
+- Walk through the updated `/implement-next-task` skill against a trivial change in `ServantClaw.Domain` and confirm the mutation-check step fires
+- Walk through the skill against a change that touches only `ServantClaw.Host` or `ServantClaw.Telegram` and confirm the mutation-check step is skipped with an explicit note
+
 ## T-012 - Build the per-context queue manager and turn execution contract
 Status: [ ]
 Goal: Serialize work one turn at a time per `(agent, project, chat)` context while allowing independent contexts to proceed separately.
@@ -624,32 +660,44 @@ Verification:
 - Run `dotnet test`
 - Intentionally validate that a forbidden dependency would fail the architecture test suite
 
-## T-023 - Add mutation testing for safety-critical logic
+## T-023 - Broaden mutation testing to all safety-critical areas and document score gates
 Status: [ ]
-Goal: Validate that the most important safety and routing tests actually detect behavioral changes.
+Goal: Extend the mutation-testing scaffold to cover every safety-critical area called out in the design and define the mutation-score gates that future CI enforcement will flip on.
 
 Scope:
-- Configure `Stryker.NET`
-- Target safety-critical areas first, including routing, thread isolation, approval gating, queue serialization, and startup validation
-- Document how mutation testing is run for this repo
+- Expand `stryker-config.json` coverage to all safety-critical slices once they exist in code:
+  - project routing
+  - thread isolation
+  - approval gating
+  - queue serialization
+  - startup validation
+- Add or tighten unit tests so each slice meets a documented mutation-score target
+- Document the per-slice score gates (`thresholds.break`, `thresholds.low`, `thresholds.high`) in repo guidance, including the advisory-vs-enforcing distinction
+- Define the exact command and config shape that CI would run later, without yet flipping CI enforcement on
+- Keep the advisory mutation-check protocol in `/implement-next-task` in sync with the expanded scope
 
 Depends on:
 - T-002
 - T-012
+- T-015
 - T-016
 - T-022
+- T-025
 
 Source:
 - Design - Mutation testing
 
 Definition of Done:
-- Mutation testing is configured and runnable for at least one safety-critical project or slice
-- Initial mutation targets cover the most important safety-sensitive logic
-- Repository guidance exists for running the mutation suite
+- Every safety-critical slice listed in design.md is covered by the mutation-testing configuration
+- Each covered slice has a documented score target and meets it, or has a recorded waiver with justification
+- Repository guidance documents the mutation-test command, config layout, and the score-gate policy
+- The `/implement-next-task` advisory check picks up the expanded scope automatically via the committed configs
+- A clear path to flipping on CI-enforcing mutation gates exists but is not yet activated
 
 Verification:
-- Run the configured mutation test command for the targeted scope
-- Confirm the mutation run completes and reports usable results
+- Run the configured mutation-test command for each covered project and confirm the reported scores match documented targets
+- Run `dotnet test` to confirm no regressions from added tests
+- Confirm the advisory mutation-check step in `/implement-next-task` surfaces the expanded scope without further skill changes
 
 ## T-024 - Implement Codex-assisted self-repair for quarantined state
 Status: [ ]

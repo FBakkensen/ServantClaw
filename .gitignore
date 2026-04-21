@@ -35,5 +35,8 @@ coverage/
 bin/
 obj/
 
+# Stryker.NET mutation test reports
+StrykerOutput/
+
 # Local Codex metadata
 .codex/
