@@ -256,7 +256,7 @@ Verification:
 - Send `/agent` and `/project` commands and confirm persisted state and user-facing confirmations
 
 ## T-010 - Implement the project catalog and explicit project resolution rules
-Status: [ ]
+Status: [x]
 Goal: Provide project discovery and the safety checks that prevent ambiguous or implicit routing.
 
 Scope:
