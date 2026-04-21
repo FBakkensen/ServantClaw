@@ -1,5 +1,8 @@
+using System.Diagnostics.CodeAnalysis;
+
 namespace ServantClaw.Application.Intake.Models;
 
+[ExcludeFromCodeCoverage]
 public sealed record InboundChatCommand(string Name, IReadOnlyList<string> Arguments, string RawText) : InboundChatInput
 {
     public string Name { get; } = string.IsNullOrWhiteSpace(Name)

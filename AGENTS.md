@@ -31,9 +31,15 @@ cd src/ServantClaw.Domain; dotnet dotnet-stryker
 cd src/ServantClaw.Application; dotnet dotnet-stryker
 ```
 
-Per-task runs use `--since:main` to mutate only files changed against the target branch. The protocol for when to run and how to interpret results lives in `.claude/skills/implement-next-task/references/mutation-check-protocol.md`. Surviving mutants are advisory, not blocking; each must be categorized as "add test", "equivalent mutant", or "low-value mutant" with a short justification in the implementation summary.
+Per-task runs use `--since:main` to mutate only files changed against the target branch. The protocol for when to run and how to handle results lives in `.claude/skills/implement-next-task/references/mutation-check-protocol.md`.
 
-Per-project configs live at `src/<Project>/stryker-config.json`. `thresholds.break = 0` keeps runs advisory; T-023 will set per-slice score gates and prepare for CI enforcement.
+**The mutation check is a hard gate.** `thresholds.break = 100` in each config, so a run fails if any mutant survives or lacks coverage. For every mutant, pick one of:
+
+- **Kill it with a test** — grounded in expected behavior from `design.md` / `user-stories.md` / `prd.md`, not whatever the current code happens to do
+- **Disable inline** with `// Stryker disable once <Mutator> : equivalent - <reason>` or `// Stryker disable once <Mutator> : low-value - <reason>` — Stryker requires the `:` reason text
+- **Exclude a whole type** with `[ExcludeFromCodeCoverage]` when its safety-critical behavior is owned by a different task (comment should point at that task — e.g. T-012/T-015/T-016/T-023)
+
+Configs also apply `ignore-methods` for logging calls and exception constructors to suppress known noise. Per-project configs live at `src/<Project>/stryker-config.json`. T-023 will expand scope to all safety-critical slices named in `design.md` and prepare CI enforcement.
 
 ## Commit & Pull Request Guidelines
 Recent history uses short, imperative commit subjects such as `Scaffold ServantClaw solution structure`. Keep that style: concise, capitalized, and focused on one change. PRs should explain what changed, why it changed, and how it was verified. Link the relevant task or issue, and include config notes or sample output when behavior changes.

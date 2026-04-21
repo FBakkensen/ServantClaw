@@ -27,6 +27,23 @@ public sealed class ChatCommandProcessorTests
     }
 
     [Fact]
+    public async Task AgentCommandShouldSetGeneralAgent()
+    {
+        InMemoryStateStore stateStore = new();
+        stateStore.ChatStates[100] = new ChatState(
+            new ChatId(100),
+            AgentKind.Coding,
+            new AgentProjectBindings(null, new ProjectId("repo")));
+        ChatCommandProcessor processor = CreateProcessor(stateStore, new FakeProjectCatalog(), ["thread-1"]);
+        InboundChatUpdate update = CreateUpdate(new InboundChatCommand("agent", ["general"], "/agent general"));
+
+        ChatCommandResult result = await processor.ProcessAsync(update, CancellationToken.None);
+
+        result.ResponseText.Should().Be("Active agent set to 'general'.");
+        stateStore.ChatStates[100].ActiveAgent.Should().Be(AgentKind.General);
+    }
+
+    [Fact]
     public async Task AgentCommandShouldRejectInvalidAgentWithoutChangingState()
     {
         InMemoryStateStore stateStore = new();
@@ -205,6 +222,20 @@ public sealed class ChatCommandProcessorTests
         ChatCommandResult result = await processor.ProcessAsync(update, CancellationToken.None);
 
         result.ResponseText.Should().Contain("/project");
+        stateStore.ChatStates.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task ProjectCommandShouldRejectBlankProjectId()
+    {
+        InMemoryStateStore stateStore = new();
+        FakeProjectCatalog projectCatalog = new(["repo"]);
+        ChatCommandProcessor processor = CreateProcessor(stateStore, projectCatalog, ["thread-1"]);
+        InboundChatUpdate update = CreateUpdate(new InboundChatCommand("project", ["coding", " "], "/project coding  "));
+
+        ChatCommandResult result = await processor.ProcessAsync(update, CancellationToken.None);
+
+        result.ResponseText.Should().Be("Project id must be provided.");
         stateStore.ChatStates.Should().BeEmpty();
     }
 

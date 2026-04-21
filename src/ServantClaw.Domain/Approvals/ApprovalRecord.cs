@@ -1,8 +1,10 @@
 using System.Collections.ObjectModel;
+using System.Diagnostics.CodeAnalysis;
 using ServantClaw.Domain.Common;
 
 namespace ServantClaw.Domain.Approvals;
 
+[ExcludeFromCodeCoverage]
 public sealed record ApprovalRecord
 {
     private static readonly ReadOnlyDictionary<string, string> EmptyMetadata =

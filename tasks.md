@@ -660,21 +660,20 @@ Verification:
 - Run `dotnet test`
 - Intentionally validate that a forbidden dependency would fail the architecture test suite
 
-## T-023 - Broaden mutation testing to all safety-critical areas and document score gates
+## T-023 - Broaden mutation testing to all safety-critical areas and prepare CI enforcement
 Status: [ ]
-Goal: Extend the mutation-testing scaffold to cover every safety-critical area called out in the design and define the mutation-score gates that future CI enforcement will flip on.
+Goal: Expand the `break: 100` mutation gate to every safety-critical area named in the design by removing the temporary `[ExcludeFromCodeCoverage]` markers that currently cover placeholder or not-yet-implemented slices, and stage the command for CI enforcement.
 
 Scope:
-- Expand `stryker-config.json` coverage to all safety-critical slices once they exist in code:
+- Remove the `[ExcludeFromCodeCoverage]` markers (and their T-023/T-016/T-012/T-015 comments) on types whose safety-critical behavior now exists in code:
   - project routing
   - thread isolation
   - approval gating
   - queue serialization
   - startup validation
-- Add or tighten unit tests so each slice meets a documented mutation-score target
-- Document the per-slice score gates (`thresholds.break`, `thresholds.low`, `thresholds.high`) in repo guidance, including the advisory-vs-enforcing distinction
+- Add or tighten unit tests so each slice passes `break: 100` against its real logic (no attribute exclusion, no inline disables outside genuine equivalent/low-value cases)
+- Document per-slice expectations where they diverge from the default thresholds
 - Define the exact command and config shape that CI would run later, without yet flipping CI enforcement on
-- Keep the advisory mutation-check protocol in `/implement-next-task` in sync with the expanded scope
 
 Depends on:
 - T-002
@@ -688,16 +687,16 @@ Source:
 - Design - Mutation testing
 
 Definition of Done:
-- Every safety-critical slice listed in design.md is covered by the mutation-testing configuration
-- Each covered slice has a documented score target and meets it, or has a recorded waiver with justification
-- Repository guidance documents the mutation-test command, config layout, and the score-gate policy
-- The `/implement-next-task` advisory check picks up the expanded scope automatically via the committed configs
+- Every safety-critical slice listed in design.md is covered by the mutation-testing configuration without a type-level exclusion
+- Each covered slice passes the hard gate with real tests, not attribute/comment exclusions
+- Any remaining inline `// Stryker disable` comments or `[ExcludeFromCodeCoverage]` attributes are genuinely equivalent/low-value with a one-line reason
+- Repository guidance documents the mutation-test command, config layout, and the CI enforcement plan
 - A clear path to flipping on CI-enforcing mutation gates exists but is not yet activated
 
 Verification:
-- Run the configured mutation-test command for each covered project and confirm the reported scores match documented targets
+- Run the configured mutation-test command for each covered project and confirm each exits 0 against `break: 100`
 - Run `dotnet test` to confirm no regressions from added tests
-- Confirm the advisory mutation-check step in `/implement-next-task` surfaces the expanded scope without further skill changes
+- Confirm the mutation-check step in `/implement-next-task` still passes without further skill changes
 
 ## T-024 - Implement Codex-assisted self-repair for quarantined state
 Status: [ ]

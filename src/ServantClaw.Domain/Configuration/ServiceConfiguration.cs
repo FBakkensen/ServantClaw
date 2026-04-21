@@ -1,5 +1,8 @@
+using System.Diagnostics.CodeAnalysis;
+
 namespace ServantClaw.Domain.Configuration;
 
+[ExcludeFromCodeCoverage]
 public sealed record ServiceConfiguration
 {
     public ServiceConfiguration(string botRootPath, string projectsRootPath, BackendConfiguration backend)
