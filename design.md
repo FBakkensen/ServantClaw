@@ -237,7 +237,9 @@ This choice keeps v1 simpler in:
 
 ### Backend recovery
 
-If `codex app-server` crashes or becomes unhealthy, ServantClaw attempts automatic restart. Persisted thread mappings and approval records remain the source of truth. If an active user request is affected, the bot reports the interruption clearly in Telegram and in logs.
+If `codex app-server` crashes or becomes unhealthy, ServantClaw attempts automatic restart. Persisted thread mappings and approval records remain the source of truth when they are healthy. If an active user request is affected, the bot reports the interruption clearly in Telegram and in logs.
+
+If normal persisted routing state is unavailable because it has been quarantined as corrupted, the system must still preserve a clean fallback path that can start a fresh Codex conversation for recovery purposes using startup configuration and Telegram ownership checks rather than the damaged records.
 
 ## Telegram Interaction Model
 
@@ -468,6 +470,7 @@ Design consequences:
 - Files should be human-inspectable where practical
 - Writes should be durable and designed to minimize corruption risk
 - Historical references should be preserved where required, especially for thread rotation and approval audit
+- Corrupted state must preserve enough evidence and diagnostics to support a later Codex-assisted recovery flow
 
 ### Conceptual layout
 
@@ -489,6 +492,12 @@ bot-root/
     approvals/
       pending/
       resolved/
+    quarantine/
+      chats/
+      threads/
+      approvals/
+    recovery/
+      incidents/
   logs/
     service/
     telegram/
@@ -531,6 +540,19 @@ bot-root/
 - resolution time
 - decision
 - related operation metadata
+
+### Corruption handling and recovery substrate
+
+If a machine-managed state file is missing or malformed, ServantClaw must fail closed for the affected record rather than continue with guessed or partially trusted state.
+
+The persistence layer should:
+
+- quarantine the unreadable payload instead of overwriting it in place
+- write machine-readable recovery diagnostics that identify the record type, canonical path, failure reason, and incident time
+- preserve enough artifact data for a later Codex-assisted repair workflow
+- allow unaffected chats, threads, and approvals to continue operating normally
+
+This substrate does not itself perform the operator-facing repair conversation. It exists so later Telegram and Codex flows can recover the system without requiring direct filesystem edits by the operator.
 
 ## Configuration Model
 
@@ -598,6 +620,7 @@ During normal operation:
 - backend unavailability is surfaced clearly to the user
 - backend process death triggers automatic restart
 - corrupted or missing state files fail closed rather than misrouting work into the wrong context
+- corrupted state creates recovery artifacts instead of forcing manual JSON repair as the only viable path
 - approval IDs that are unknown, expired, or already resolved are rejected safely
 
 ## Security and Safety Boundaries
@@ -642,6 +665,8 @@ Keeping maintenance inside the normal assistant session is simpler for the opera
 ### File-state robustness
 
 File-based JSON state is appropriate for v1, but it requires disciplined atomic-write patterns and corruption handling to avoid partial-write problems after crashes.
+
+The harder product requirement is remote recoverability: the operator may be on Telegram with no direct access to the machine, so corruption handling must preserve a Codex-reachable self-repair path rather than devolve into "fix the JSON manually on disk."
 
 ## Implementation Sequence
 

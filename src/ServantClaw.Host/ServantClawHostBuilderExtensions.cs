@@ -4,6 +4,7 @@ using Microsoft.Extensions.Hosting.WindowsServices;
 using ServantClaw.Host.Configuration;
 using ServantClaw.Host.Logging;
 using ServantClaw.Host.Runtime;
+using ServantClaw.Infrastructure;
 using Serilog;
 
 namespace ServantClaw.Host;
@@ -24,6 +25,7 @@ public static class ServantClawHostBuilderExtensions
         builder.Services.Configure<WindowsServiceLifetimeOptions>(options => options.ServiceName = WindowsServiceName);
         builder.Services.AddWindowsService(options => options.ServiceName = WindowsServiceName);
         builder.Services.AddServantClawStartupConfiguration(builder.Configuration);
+        builder.Services.AddInfrastructureServices();
         builder.Services.AddSingleton<HostRuntimeCoordinator>();
         builder.Services.AddHostedService<Worker>();
 

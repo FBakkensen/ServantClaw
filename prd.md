@@ -190,6 +190,7 @@ Requirements:
 - No database in v1
 - Human-inspectable state where practical
 - Durable persistence across service restarts
+- Corrupted machine-managed state must preserve recovery artifacts and diagnostics instead of requiring manual JSON repair as the only path forward
 - Separate storage for:
   - bot configuration
   - Telegram identity/bindings
@@ -283,6 +284,7 @@ The default durable context unit is:
 - Non-owner Telegram users must not be able to control the bot.
 - `/clear` must not destructively erase prior history.
 - Approval actions must be auditable after the fact.
+- The operator must retain a path to communicate with Codex for guided self-repair even when normal persisted routing state is damaged.
 
 ## Observability Requirements
 
@@ -317,6 +319,10 @@ The product now explicitly requires the ability to modify its own Codex environm
 
 An additional operational risk is safe remote upgrade handling for the local `codex-rs` server / `codex app-server` runtime. We need a clear upgrade flow, version visibility, failure reporting, and rollback or recovery expectations when an update does not complete cleanly.
 
+### 5. Self-repair path under damaged state
+
+Because the product is operated remotely over Telegram, local file corruption cannot assume manual operator repair on disk. V1 therefore needs an explicit self-repair path that can still reach Codex, carry forward quarantine diagnostics, and help the operator recover damaged state without trusting the corrupted routing records themselves.
+
 ## Acceptance Criteria
 
 ServantClaw v1 is complete when all of the following are true:
@@ -333,6 +339,7 @@ ServantClaw v1 is complete when all of the following are true:
 - The assistant can access online information through a web search / retrieval capability
 - The operator can trigger an update of the local `codex-rs` server / `codex app-server` runtime from Telegram when a newer release is needed
 - All state persists in files under the bot root
+- Corrupted persisted state does not strand the operator and instead preserves a Codex-assisted recovery path with usable diagnostics
 - The Codex backend is integrated through a transport abstraction, with `stdio` implemented in v1
 
 ## References
