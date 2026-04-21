@@ -199,7 +199,7 @@ Verification:
 - Inspect generated state files for expected structure and contents
 
 ## T-008 - Implement owner filtering and Telegram update intake
-Status: [ ]
+Status: [x]
 Goal: Receive Telegram updates, accept only the configured owner, and reject or ignore unauthorized users safely.
 
 Scope:

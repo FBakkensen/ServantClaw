@@ -3,8 +3,9 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Hosting.WindowsServices;
+using ServantClaw.Application.Runtime;
 using ServantClaw.Host;
-using ServantClaw.Host.Runtime;
+using ServantClaw.IntegrationTests.Testing;
 using Xunit;
 
 namespace ServantClaw.IntegrationTests;
@@ -84,6 +85,8 @@ public sealed class HostLifecycleTests
         builder.Configuration.Sources.Clear();
         builder.Configuration.AddInMemoryCollection(CreateValidConfiguration());
         builder.AddServantClawHost();
+        builder.Services.AddSingleton<ServantClaw.Telegram.Transport.ITelegramPollingClientFactory>(
+            new FakeTelegramPollingClientFactory());
         return builder;
     }
 

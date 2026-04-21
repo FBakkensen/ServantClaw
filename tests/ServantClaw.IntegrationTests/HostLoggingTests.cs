@@ -3,10 +3,11 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
+using ServantClaw.Application.Runtime;
 using ServantClaw.Host;
 using ServantClaw.Host.Configuration;
 using ServantClaw.Host.Logging;
-using ServantClaw.Host.Runtime;
+using ServantClaw.IntegrationTests.Testing;
 using Serilog;
 using Xunit;
 
@@ -43,7 +44,7 @@ public sealed class HostLoggingTests
     public async Task HostShouldWriteDurableLogsWhenRuntimeParticipantStartupFails()
     {
         string botRootPath = CreateTemporaryDirectory();
-        IHost host = CreateHost(CreateValidConfiguration(botRootPath), new ThrowingParticipant());
+        IHost host = CreateHost(CreateValidConfiguration(botRootPath), participants: [new ThrowingParticipant()]);
 
         try
         {
@@ -96,8 +97,52 @@ public sealed class HostLoggingTests
         logContents.Should().Contain("Telegram:BotToken still uses the placeholder value.");
     }
 
+    [Fact]
+    public async Task HostShouldWriteDurableLogsForTelegramIntakeOutcomes()
+    {
+        string botRootPath = CreateTemporaryDirectory();
+        FakeTelegramPollingClientFactory pollingClientFactory = new();
+        pollingClientFactory.SharedClient.EnqueueBatch(
+            new ServantClaw.Telegram.Transport.TelegramIncomingUpdate(
+                1,
+                new ServantClaw.Telegram.Transport.TelegramIncomingMessage(
+                    100,
+                    42,
+                    "approved-owner",
+                    DateTimeOffset.UtcNow,
+                    "hello from telegram")),
+            new ServantClaw.Telegram.Transport.TelegramIncomingUpdate(
+                2,
+                new ServantClaw.Telegram.Transport.TelegramIncomingMessage(
+                    100,
+                    99,
+                    "intruder",
+                    DateTimeOffset.UtcNow,
+                    "hack")));
+
+        IHost host = CreateHost(CreateValidConfiguration(botRootPath), pollingClientFactory);
+
+        try
+        {
+            await host.StartAsync();
+            await Task.Delay(200);
+            await host.StopAsync();
+        }
+        finally
+        {
+            host.Dispose();
+        }
+
+        string logContents = await ReadLogContentsAsync(botRootPath);
+
+        logContents.Should().Contain("Telegram polling intake started");
+        logContents.Should().Contain("Accepted owner text message");
+        logContents.Should().Contain("Ignored Telegram update from unauthorized user 99 in chat 100");
+    }
+
     private static IHost CreateHost(
         IReadOnlyDictionary<string, string?> configurationValues,
+        FakeTelegramPollingClientFactory? pollingClientFactory = null,
         params IHostRuntimeParticipant[] participants)
     {
         HostApplicationBuilder builder = Microsoft.Extensions.Hosting.Host.CreateApplicationBuilder(new HostApplicationBuilderSettings
@@ -108,6 +153,8 @@ public sealed class HostLoggingTests
         builder.Configuration.Sources.Clear();
         builder.Configuration.AddInMemoryCollection(configurationValues);
         builder.AddServantClawHost();
+        builder.Services.AddSingleton<ServantClaw.Telegram.Transport.ITelegramPollingClientFactory>(
+            pollingClientFactory ?? new FakeTelegramPollingClientFactory());
 
         foreach (IHostRuntimeParticipant participant in participants)
         {

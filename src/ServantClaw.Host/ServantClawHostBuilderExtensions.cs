@@ -6,6 +6,7 @@ using ServantClaw.Host.Logging;
 using ServantClaw.Host.Runtime;
 using ServantClaw.Infrastructure;
 using Serilog;
+using ServantClaw.Telegram;
 
 namespace ServantClaw.Host;
 
@@ -26,6 +27,7 @@ public static class ServantClawHostBuilderExtensions
         builder.Services.AddWindowsService(options => options.ServiceName = WindowsServiceName);
         builder.Services.AddServantClawStartupConfiguration(builder.Configuration);
         builder.Services.AddInfrastructureServices();
+        builder.Services.AddTelegramServices();
         builder.Services.AddSingleton<HostRuntimeCoordinator>();
         builder.Services.AddHostedService<Worker>();
 

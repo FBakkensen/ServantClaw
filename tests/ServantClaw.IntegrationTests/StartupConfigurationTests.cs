@@ -6,6 +6,7 @@ using Microsoft.Extensions.Options;
 using ServantClaw.Domain.Configuration;
 using ServantClaw.Host;
 using ServantClaw.Host.Configuration;
+using ServantClaw.IntegrationTests.Testing;
 using Xunit;
 
 namespace ServantClaw.IntegrationTests;
@@ -83,6 +84,8 @@ public sealed class StartupConfigurationTests
         builder.Configuration.Sources.Clear();
         builder.Configuration.AddInMemoryCollection(configurationValues);
         builder.AddServantClawHost();
+        builder.Services.AddSingleton<ServantClaw.Telegram.Transport.ITelegramPollingClientFactory>(
+            new FakeTelegramPollingClientFactory());
 
         return builder.Build();
     }
