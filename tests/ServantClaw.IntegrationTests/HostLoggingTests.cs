@@ -12,6 +12,7 @@ using Xunit;
 
 namespace ServantClaw.IntegrationTests;
 
+[Collection(NonParallelIntegrationTestGroup.Name)]
 public sealed class HostLoggingTests
 {
     [Fact]
@@ -183,4 +184,10 @@ public sealed class HostLoggingTests
         public Task StopAsync(CancellationToken cancellationToken) =>
             Task.CompletedTask;
     }
+}
+
+[CollectionDefinition(Name, DisableParallelization = true)]
+public sealed class NonParallelIntegrationTestGroup
+{
+    public const string Name = "NonParallelIntegration";
 }

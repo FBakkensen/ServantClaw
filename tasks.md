@@ -171,13 +171,14 @@ Verification:
 - Run the host through a success path and a startup failure path and inspect emitted logs
 
 ## T-007 - Implement the file-based state store with atomic JSON persistence
-Status: [ ]
+Status: [x]
 Goal: Persist machine-managed state safely under the bot root using human-inspectable JSON files.
 
 Scope:
 - Implement persistence for chat state, thread mappings, approvals, and owner/config metadata as needed
 - Use atomic write patterns to reduce corruption risk
 - Add repository-safe file layout matching the design
+- Quarantine malformed state files and persist machine-readable recovery diagnostics for later Codex-assisted repair
 
 Depends on:
 - T-003
@@ -191,6 +192,7 @@ Definition of Done:
 - The state store can read and write the required records under the expected directory structure
 - Write behavior is resilient against partial-update risks as far as practical in v1
 - Integration tests cover JSON persistence and reload behavior
+- Corrupted state is failed closed for the affected record while preserving recovery artifacts instead of requiring manual JSON repair as the only path forward
 
 Verification:
 - Run `dotnet test`
@@ -488,6 +490,7 @@ Scope:
 - Restart the shared backend when it crashes or becomes unhealthy
 - Restore or safely fail pending execution and approval state after service restart
 - Report interruptions clearly to the operator
+- Preserve a clean fallback path that can still reach Codex for recovery when normal persisted routing state has been quarantined
 
 Depends on:
 - T-013
@@ -504,6 +507,7 @@ Definition of Done:
 - Pending approvals and thread mappings survive service restart safely
 - Interrupted active work is surfaced clearly instead of silently disappearing
 - Tests cover restart-sensitive flows where practical
+- Recovery behavior does not strand the operator when damaged state has been quarantined
 
 Verification:
 - Run `dotnet test`
@@ -646,3 +650,36 @@ Definition of Done:
 Verification:
 - Run the configured mutation test command for the targeted scope
 - Confirm the mutation run completes and reports usable results
+
+## T-024 - Implement Codex-assisted self-repair for quarantined state
+Status: [ ]
+Goal: Let the operator recover from damaged persisted state remotely by reaching Codex through a clean fallback path and using structured recovery artifacts instead of manual filesystem repair.
+
+Scope:
+- Detect when quarantined state requires operator-visible recovery
+- Provide a Telegram-initiated or automatically offered path that starts a fresh Codex recovery conversation without relying on corrupted routing records
+- Attach or summarize the structured recovery diagnostics and quarantined record metadata for the recovery conversation
+- Allow approved repair actions to restore, replace, or safely discard damaged state with clear audit visibility
+
+Depends on:
+- T-007
+- T-008
+- T-015
+- T-018
+- T-019
+
+Source:
+- PRD - Safety Requirements
+- PRD - Storage Requirements
+- Design - Persistence Design
+- Design - Backend recovery
+
+Definition of Done:
+- The operator can still reach Codex for guided recovery when normal persisted routing state has been quarantined
+- Recovery conversations use structured diagnostics from the persistence layer rather than opaque failure text alone
+- Any repair action that changes persisted state is explicit and auditable
+- Tests cover a controlled damaged-state recovery flow
+
+Verification:
+- Run `dotnet test`
+- Simulate quarantined state and verify the operator can enter a Codex-assisted recovery flow and complete a controlled repair
