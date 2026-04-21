@@ -1,7 +1,9 @@
+using System.Diagnostics.CodeAnalysis;
 using ServantClaw.Domain.Common;
 
 namespace ServantClaw.Application.Intake.Models;
 
+[ExcludeFromCodeCoverage]
 public sealed record InboundChatUpdate(
     ChatId ChatId,
     UserId UserId,

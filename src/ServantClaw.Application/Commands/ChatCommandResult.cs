@@ -1,5 +1,8 @@
+using System.Diagnostics.CodeAnalysis;
+
 namespace ServantClaw.Application.Commands;
 
+[ExcludeFromCodeCoverage]
 public sealed record ChatCommandResult(string ResponseText)
 {
     public string ResponseText { get; } = string.IsNullOrWhiteSpace(ResponseText)

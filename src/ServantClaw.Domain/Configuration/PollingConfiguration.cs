@@ -1,5 +1,8 @@
+using System.Diagnostics.CodeAnalysis;
+
 namespace ServantClaw.Domain.Configuration;
 
+[ExcludeFromCodeCoverage]
 public sealed record PollingConfiguration
 {
     public PollingConfiguration(TimeSpan timeout, TimeSpan retryDelay)

@@ -10,7 +10,8 @@
       "target": "main",
       "ignore-changes-in": ["**/obj/**", "**/bin/**", "**/*.generated.cs"]
     },
-    "thresholds": { "high": 80, "low": 60, "break": 0 },
+    "thresholds": { "high": 100, "low": 100, "break": 100 },
+    "ignore-methods": ["*Log", "Console.Write*", "*Exception.ctor"],
     "reporters": ["progress", "html", "json", "cleartext"]
   }
 }

@@ -28,6 +28,22 @@ public sealed class DomainContractsTests
     }
 
     [Fact]
+    public void ChatIdShouldRejectZeroValue()
+    {
+        Action act = () => _ = new ChatId(0);
+
+        act.Should().Throw<ArgumentOutOfRangeException>();
+    }
+
+    [Fact]
+    public void UserIdShouldRejectZeroValue()
+    {
+        Action act = () => _ = new UserId(0);
+
+        act.Should().Throw<ArgumentOutOfRangeException>();
+    }
+
+    [Fact]
     public void ChatStateShouldRejectNullProjectBindings()
     {
         Action act = () => _ = new ChatState(new ChatId(42), AgentKind.General, null!);

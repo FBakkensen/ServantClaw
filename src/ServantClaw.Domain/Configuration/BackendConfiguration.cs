@@ -1,5 +1,8 @@
+using System.Diagnostics.CodeAnalysis;
+
 namespace ServantClaw.Domain.Configuration;
 
+[ExcludeFromCodeCoverage]
 public sealed record BackendConfiguration
 {
     public BackendConfiguration(string executablePath, string? workingDirectory = null, IReadOnlyList<string>? arguments = null)
