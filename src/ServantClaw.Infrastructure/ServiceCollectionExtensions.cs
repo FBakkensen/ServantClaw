@@ -1,5 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
+using ServantClaw.Application.Commands;
 using ServantClaw.Application.Intake;
+using ServantClaw.Infrastructure.Commands;
 using ServantClaw.Domain.State;
 using ServantClaw.Infrastructure.Intake;
 using ServantClaw.Infrastructure.State;
@@ -12,6 +14,8 @@ public static class ServiceCollectionExtensions
     {
         ArgumentNullException.ThrowIfNull(services);
 
+        services.AddSingleton<ChatCommandProcessor>();
+        services.AddSingleton<IProjectCatalog, FileSystemProjectCatalog>();
         services.AddSingleton<IStateStore, FileStateStore>();
         services.AddSingleton<IChatUpdateIntake, LoggingChatUpdateIntake>();
         return services;
