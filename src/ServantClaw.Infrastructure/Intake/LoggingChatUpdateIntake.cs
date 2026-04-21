@@ -1,37 +1,52 @@
+using ServantClaw.Application.Commands;
 using Microsoft.Extensions.Logging;
 using ServantClaw.Application.Intake;
 using ServantClaw.Application.Intake.Models;
 
 namespace ServantClaw.Infrastructure.Intake;
 
-public sealed partial class LoggingChatUpdateIntake(ILogger<LoggingChatUpdateIntake> logger) : IChatUpdateIntake
+public sealed partial class LoggingChatUpdateIntake(
+    ChatCommandProcessor commandProcessor,
+    IChatReplySink chatReplySink,
+    ILogger<LoggingChatUpdateIntake> logger) : IChatUpdateIntake
 {
+    private readonly ChatCommandProcessor commandProcessor = commandProcessor ?? throw new ArgumentNullException(nameof(commandProcessor));
+    private readonly IChatReplySink chatReplySink = chatReplySink ?? throw new ArgumentNullException(nameof(chatReplySink));
+
     public ValueTask HandleAsync(InboundChatUpdate update, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(update);
-
-        switch (update.Input)
+        return update.Input switch
         {
-            case InboundChatCommand command:
-                Log.OwnerCommandAccepted(
-                    logger,
-                    update.ChatId.Value,
-                    update.UserId.Value,
-                    command.Name,
-                    command.Arguments.Count);
-                break;
+            InboundChatCommand command => HandleCommandAsync(update, command, cancellationToken),
+            InboundChatTextMessage message => HandleTextMessageAsync(update, message),
+            _ => throw new InvalidOperationException($"Unsupported inbound chat input type '{update.Input.GetType().Name}'.")
+        };
+    }
 
-            case InboundChatTextMessage message:
-                Log.OwnerTextMessageAccepted(
-                    logger,
-                    update.ChatId.Value,
-                    update.UserId.Value,
-                    message.Text.Length);
-                break;
+    private async ValueTask HandleCommandAsync(
+        InboundChatUpdate update,
+        InboundChatCommand command,
+        CancellationToken cancellationToken)
+    {
+        Log.OwnerCommandAccepted(
+            logger,
+            update.ChatId.Value,
+            update.UserId.Value,
+            command.Name,
+            command.Arguments.Count);
 
-            default:
-                throw new InvalidOperationException($"Unsupported inbound chat input type '{update.Input.GetType().Name}'.");
-        }
+        ChatCommandResult result = await commandProcessor.ProcessAsync(update, cancellationToken);
+        await chatReplySink.SendMessageAsync(update.ChatId, result.ResponseText, cancellationToken);
+    }
+
+    private ValueTask HandleTextMessageAsync(InboundChatUpdate update, InboundChatTextMessage message)
+    {
+        Log.OwnerTextMessageAccepted(
+            logger,
+            update.ChatId.Value,
+            update.UserId.Value,
+            message.Text.Length);
 
         return ValueTask.CompletedTask;
     }

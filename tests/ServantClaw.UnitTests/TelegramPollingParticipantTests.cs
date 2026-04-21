@@ -137,6 +137,9 @@ public sealed class TelegramPollingParticipantTests
             return ValueTask.CompletedTask;
         }
 
+        public ValueTask SendMessageAsync(long chatId, string text, CancellationToken cancellationToken) =>
+            ValueTask.CompletedTask;
+
         public async ValueTask<IReadOnlyList<TelegramIncomingUpdate>> GetUpdatesAsync(
             int? offset,
             TimeSpan timeout,

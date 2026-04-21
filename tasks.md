@@ -228,7 +228,7 @@ Verification:
 - Exercise the bot with owner and non-owner messages in a controlled environment
 
 ## T-009 - Implement chat agent selection and project binding state
-Status: [ ]
+Status: [x]
 Goal: Persist and resolve the active agent and per-agent project binding for each Telegram chat.
 
 Scope:

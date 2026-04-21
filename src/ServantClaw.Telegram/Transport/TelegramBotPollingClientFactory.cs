@@ -17,6 +17,9 @@ public sealed class TelegramBotPollingClientFactory : ITelegramPollingClientFact
         public async ValueTask DropPendingUpdatesAsync(CancellationToken cancellationToken) =>
             await botClient.DropPendingUpdates(cancellationToken);
 
+        public async ValueTask SendMessageAsync(long chatId, string text, CancellationToken cancellationToken) =>
+            await botClient.SendMessage(chatId, text, cancellationToken: cancellationToken);
+
         public async ValueTask<IReadOnlyList<TelegramIncomingUpdate>> GetUpdatesAsync(
             int? offset,
             TimeSpan timeout,
