@@ -22,6 +22,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<ThreadMappingCoordinator>();
         services.AddSingleton<IProjectCatalog, FileSystemProjectCatalog>();
         services.AddSingleton<IThreadReferenceGenerator, GuidThreadReferenceGenerator>();
+        services.TryAddSingleton<IClock, SystemClock>();
         services.AddSingleton<IStateStore, FileStateStore>();
         services.AddSingleton<IChatUpdateIntake, LoggingChatUpdateIntake>();
         services.TryAddSingleton<ITurnExecutor, NoOpTurnExecutor>();

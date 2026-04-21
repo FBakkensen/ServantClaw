@@ -39,6 +39,8 @@ public static class ServantClawStartupConfigurationExtensions
         services.AddSingleton(serviceProvider =>
             serviceProvider.GetRequiredService<IOptions<ServiceOptions>>().Value.ToDomainConfiguration());
         services.AddSingleton(serviceProvider =>
+            serviceProvider.GetRequiredService<ServiceConfiguration>().Backend);
+        services.AddSingleton(serviceProvider =>
             serviceProvider.GetRequiredService<IOptions<TelegramOptions>>().Value.ToDomainConfiguration());
         services.AddSingleton(serviceProvider =>
             serviceProvider.GetRequiredService<IOptions<OwnerOptions>>().Value.ToDomainConfiguration());
