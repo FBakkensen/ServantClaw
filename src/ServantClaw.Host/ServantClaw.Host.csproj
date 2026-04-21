@@ -13,6 +13,8 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Extensions.Hosting.WindowsServices" Version="9.0.10" />
+    <PackageReference Include="Serilog.Extensions.Hosting" Version="9.0.0" />
+    <PackageReference Include="Serilog.Sinks.File" Version="7.0.0" />
   </ItemGroup>
 
   <ItemGroup>
@@ -29,5 +31,11 @@
     <ProjectReference Include="..\ServantClaw.Infrastructure\ServantClaw.Infrastructure.csproj" />
     <ProjectReference Include="..\ServantClaw.Telegram\ServantClaw.Telegram.csproj" />
     <ProjectReference Include="..\ServantClaw.Codex\ServantClaw.Codex.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">
+      <_Parameter1>ServantClaw.IntegrationTests</_Parameter1>
+    </AssemblyAttribute>
   </ItemGroup>
 </Project>

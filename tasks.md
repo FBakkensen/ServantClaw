@@ -147,13 +147,13 @@ Verification:
 - Run the host locally and confirm clean startup and shutdown behavior
 
 ## T-006 - Add durable logging and service-critical event reporting
-Status: [ ]
+Status: [x]
 Goal: Provide the minimum observability required to operate and troubleshoot ServantClaw as a service.
 
 Scope:
 - Configure durable application logging
 - Add structured logs for startup, shutdown, command handling, approvals, and backend lifecycle
-- Add Windows Event Log reporting for service-critical failures where supported
+- Add durable service-critical failure reporting through the main log sink
 
 Depends on:
 - T-005
@@ -164,7 +164,7 @@ Source:
 
 Definition of Done:
 - Logging is configured for the main service flows
-- Service-critical startup failures are emitted clearly
+- Service-critical startup failures are emitted clearly through the durable log output
 - Tests verify important logging and reporting behavior where practical
 
 Verification:

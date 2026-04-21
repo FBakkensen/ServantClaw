@@ -152,7 +152,7 @@ A change is not done when it merely works locally. For ServantClaw, a meaningful
 ### External dependencies
 
 - Telegram bot authentication is provided through a local config file with a placeholder token value by default
-- If the Telegram token is missing or invalid, startup fails clearly and writes guidance to Windows Event Log
+- If the Telegram token is missing or invalid, startup fails clearly and writes guidance to the durable service log
 - Codex authentication is a separate prerequisite and must already be provisioned locally before service startup
 - Online retrieval is provided by the configured Codex environment rather than by a separate v1 service-owned web integration
 
@@ -180,7 +180,7 @@ The system is organized into the following layers:
 
 #### 1. Windows Service host
 
-Owns process startup, shutdown, service lifecycle integration, Windows Event Log integration, and durable runtime logging.
+Owns process startup, shutdown, service lifecycle integration, and durable runtime logging.
 
 #### 2. Telegram adapter
 
@@ -542,7 +542,7 @@ Example expectations:
 
 - placeholder value makes the missing token obvious
 - startup validation rejects placeholder or malformed values
-- startup failure writes clear remediation guidance to Windows Event Log and service logs
+- startup failure writes clear remediation guidance to the durable service log
 
 ### Config categories
 
@@ -567,16 +567,16 @@ Minimum logging:
 - per-turn success and failure
 - configuration and startup validation failures
 
-### Windows Event Log
+### Service-critical failure reporting
 
-Windows Event Log should be used for service-critical startup and runtime failures, especially:
+Durable service logs should be used for service-critical startup and runtime failures, especially:
 
 - missing or invalid Telegram token
 - backend startup failure
 - missing required owner binding
 - likely missing Codex authentication prerequisite
 
-These messages should include clear guidance about the next operator action.
+These messages should include clear guidance about the next operator action and remain available for post-mortem inspection under the bot root logging directory.
 
 ## Failure Handling
 

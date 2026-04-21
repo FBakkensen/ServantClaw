@@ -1,5 +1,7 @@
 using Microsoft.Extensions.Hosting;
 using ServantClaw.Host;
+using ServantClaw.Host.Logging;
+using Serilog;
 
 var builder = Host.CreateApplicationBuilder(new HostApplicationBuilderSettings
 {
@@ -7,7 +9,21 @@ var builder = Host.CreateApplicationBuilder(new HostApplicationBuilderSettings
     ContentRootPath = AppContext.BaseDirectory
 });
 
-builder.AddServantClawHost();
+Log.Logger = ServantClawSerilogConfiguration.CreateBootstrapLogger(builder.Configuration);
 
-var host = builder.Build();
-await host.RunAsync();
+try
+{
+    builder.AddServantClawHost();
+
+    var host = builder.Build();
+    await host.RunAsync();
+}
+catch (Exception exception)
+{
+    Log.Fatal(exception, "ServantClaw host terminated unexpectedly");
+    throw;
+}
+finally
+{
+    await Log.CloseAndFlushAsync();
+}
