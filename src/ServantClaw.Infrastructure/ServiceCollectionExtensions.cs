@@ -1,4 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using ServantClaw.Application.Commands;
 using ServantClaw.Application.Intake;
 using ServantClaw.Application.Runtime;
@@ -23,6 +24,12 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IThreadReferenceGenerator, GuidThreadReferenceGenerator>();
         services.AddSingleton<IStateStore, FileStateStore>();
         services.AddSingleton<IChatUpdateIntake, LoggingChatUpdateIntake>();
+        services.TryAddSingleton<ITurnExecutor, NoOpTurnExecutor>();
+        services.AddSingleton<PerContextTurnQueue>();
+        services.AddSingleton<IPerContextTurnQueue>(provider => provider.GetRequiredService<PerContextTurnQueue>());
+        services.TryAddEnumerable(
+            ServiceDescriptor.Singleton<IHostRuntimeParticipant, PerContextTurnQueue>(
+                provider => provider.GetRequiredService<PerContextTurnQueue>()));
         return services;
     }
 }

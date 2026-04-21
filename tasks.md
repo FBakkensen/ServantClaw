@@ -349,7 +349,7 @@ Verification:
 - Walk through the skill against a change that touches only `ServantClaw.Host` or `ServantClaw.Telegram` and confirm the mutation-check step is skipped with an explicit note
 
 ## T-012 - Build the per-context queue manager and turn execution contract
-Status: [ ]
+Status: [x]
 Goal: Serialize work one turn at a time per `(agent, project, chat)` context while allowing independent contexts to proceed separately.
 
 Scope:
