@@ -149,16 +149,19 @@ Once approved, treat the engineering principles in `design.md` as mandatory exec
 5. Run the `dotnet-simplifier` skill after the implementation is in place and apply the in-scope simplifications that preserve the selected task's behavior
 6. Run the task's required verification commands and any nearby targeted tests
 7. Fix issues until the simplification pass and verification pass, or a real blocker is identified
-8. Review `AGENTS.md` just before commit time and decide whether the finished work introduced durable guidance future agents need
-9. Update `AGENTS.md` only when there is something notable to preserve, such as design decisions, important implementation patterns, architectural constraints, operational caveats, or other long-lived guidance
-10. Do not add transient process notes, execution logs, or backlog/progress tracking to `AGENTS.md`; that kind of state belongs in `tasks.md`
-11. Create a focused commit only after the task is implemented, verified, any allowed `tasks.md` updates are in place, and any warranted `AGENTS.md` update has been made
+8. Run the mutation-check protocol in [references/mutation-check-protocol.md](references/mutation-check-protocol.md) when the current diff touches a configured safety-critical project. The protocol is advisory: surviving mutants must be surfaced and categorized in the implementation summary, but they do not block the task.
+9. Review `AGENTS.md` just before commit time and decide whether the finished work introduced durable guidance future agents need
+10. Update `AGENTS.md` only when there is something notable to preserve, such as design decisions, important implementation patterns, architectural constraints, operational caveats, or other long-lived guidance
+11. Do not add transient process notes, execution logs, or backlog/progress tracking to `AGENTS.md`; that kind of state belongs in `tasks.md`
+12. Create a focused commit only after the task is implemented, verified, any allowed `tasks.md` updates are in place, and any warranted `AGENTS.md` update has been made
 
 Do not silently widen scope beyond the selected task unless that is required to satisfy the cited design contract.
 
 ## Verification And Completion
 
 Use the task's `Verification` section as the minimum verification bar. Run the `dotnet-simplifier` skill as part of verification after implementation changes are ready for refinement. Add narrower targeted checks when they improve confidence.
+
+When the changed files touch a configured safety-critical project, the mutation-check protocol in [references/mutation-check-protocol.md](references/mutation-check-protocol.md) is part of verification. The protocol is advisory: surviving mutants are reported and categorized, not blocking.
 
 For .NET tasks in this repository, expect verification to usually include some combination of:
 
@@ -212,6 +215,7 @@ When the work is complete, report:
 - Whether `tasks.md` was updated
 - Whether `AGENTS.md` was reviewed and whether it was updated
 - Whether the changes were committed and the commit result
+- Whether the mutation-check ran, and for each surviving mutant whether it was classified as "add test" (with the test added), "equivalent mutant" (with justification), or "low-value mutant" (with justification)
 - Any remaining risks, follow-up work, or blockers
 
 If implementation was not approved or could not be completed, say exactly where execution stopped and what decision or blocker remains.

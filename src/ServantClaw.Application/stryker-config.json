@@ -1,0 +1,16 @@
+{
+  "stryker-config": {
+    "solution": "../../ServantClaw.sln",
+    "project": "ServantClaw.Application.csproj",
+    "test-projects": [
+      "../../tests/ServantClaw.UnitTests/ServantClaw.UnitTests.csproj"
+    ],
+    "since": {
+      "enabled": false,
+      "target": "main",
+      "ignore-changes-in": ["**/obj/**", "**/bin/**", "**/*.generated.cs"]
+    },
+    "thresholds": { "high": 80, "low": 60, "break": 0 },
+    "reporters": ["progress", "html", "json", "cleartext"]
+  }
+}

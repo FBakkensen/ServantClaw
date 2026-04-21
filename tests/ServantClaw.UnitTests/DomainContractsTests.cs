@@ -28,6 +28,14 @@ public sealed class DomainContractsTests
     }
 
     [Fact]
+    public void ChatStateShouldRejectNullProjectBindings()
+    {
+        Action act = () => _ = new ChatState(new ChatId(42), AgentKind.General, null!);
+
+        act.Should().Throw<ArgumentNullException>().Which.ParamName.Should().Be("projectBindings");
+    }
+
+    [Fact]
     public void ChatStateShouldTrackActiveAgentAndPerAgentProjectBindings()
     {
         ChatState state = new(
