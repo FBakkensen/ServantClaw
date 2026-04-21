@@ -1,6 +1,8 @@
+using ServantClaw.Application.Approvals;
 using ServantClaw.Application.Intake.Models;
 using ServantClaw.Application.Runtime;
 using ServantClaw.Domain.Agents;
+using ServantClaw.Domain.Approvals;
 using ServantClaw.Domain.Common;
 using ServantClaw.Domain.Routing;
 using ServantClaw.Domain.State;
@@ -10,11 +12,13 @@ namespace ServantClaw.Application.Commands;
 public sealed class ChatCommandProcessor(
     IStateStore stateStore,
     IProjectCatalog projectCatalog,
-    ThreadMappingCoordinator threadMappingCoordinator)
+    ThreadMappingCoordinator threadMappingCoordinator,
+    IApprovalCoordinator approvalCoordinator)
 {
     private readonly IStateStore stateStore = stateStore ?? throw new ArgumentNullException(nameof(stateStore));
     private readonly IProjectCatalog projectCatalog = projectCatalog ?? throw new ArgumentNullException(nameof(projectCatalog));
     private readonly ThreadMappingCoordinator threadMappingCoordinator = threadMappingCoordinator ?? throw new ArgumentNullException(nameof(threadMappingCoordinator));
+    private readonly IApprovalCoordinator approvalCoordinator = approvalCoordinator ?? throw new ArgumentNullException(nameof(approvalCoordinator));
 
     public async ValueTask<ChatCommandResult> ProcessAsync(InboundChatUpdate update, CancellationToken cancellationToken)
     {
@@ -31,6 +35,8 @@ public sealed class ChatCommandProcessor(
             "agent" => await ProcessAgentCommandAsync(update, command, cancellationToken),
             "project" => await ProcessProjectCommandAsync(update, command, cancellationToken),
             "clear" => await ProcessClearCommandAsync(update, command, cancellationToken),
+            "approve" => await ProcessApprovalDecisionAsync(update, command, ApprovalDecision.Approved, cancellationToken),
+            "deny" => await ProcessApprovalDecisionAsync(update, command, ApprovalDecision.Denied, cancellationToken),
             _ => new ChatCommandResult($"Unsupported command '/{command.Name}'.")
         };
     }
@@ -122,6 +128,26 @@ public sealed class ChatCommandProcessor(
 
         return new ChatCommandResult(
             $"Started a fresh thread for agent '{ToAgentId(currentState.ActiveAgent)}' and project '{selectedProject.Value}'.");
+    }
+
+    private async ValueTask<ChatCommandResult> ProcessApprovalDecisionAsync(
+        InboundChatUpdate update,
+        InboundChatCommand command,
+        ApprovalDecision decision,
+        CancellationToken cancellationToken)
+    {
+        string commandName = decision == ApprovalDecision.Approved ? "approve" : "deny";
+
+        if (command.Arguments.Count != 1 || string.IsNullOrWhiteSpace(command.Arguments[0]))
+        {
+            return new ChatCommandResult($"Usage: /{commandName} <approval-id>");
+        }
+
+        ApprovalId approvalId = new(command.Arguments[0]);
+        ApprovalResolutionResult result = await approvalCoordinator
+            .ResolveAsync(approvalId, update.ChatId, decision, cancellationToken);
+
+        return new ChatCommandResult(result.Message);
     }
 
     private async ValueTask<ChatState> GetOrCreateChatStateAsync(ChatId chatId, CancellationToken cancellationToken) =>

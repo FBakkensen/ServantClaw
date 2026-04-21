@@ -12,6 +12,8 @@ internal sealed class InMemoryStateStore : IStateStore
 
     public Dictionary<ThreadContext, ThreadMapping> ThreadMappings { get; } = [];
 
+    public Dictionary<ApprovalId, ApprovalRecord> Approvals { get; } = [];
+
     public ValueTask<ChatState?> GetChatStateAsync(ChatId chatId, CancellationToken cancellationToken) =>
         ValueTask.FromResult(ChatStates.TryGetValue(chatId.Value, out ChatState? state) ? state : null);
 
@@ -31,13 +33,17 @@ internal sealed class InMemoryStateStore : IStateStore
     }
 
     public ValueTask<ApprovalRecord?> GetApprovalAsync(ApprovalId approvalId, CancellationToken cancellationToken) =>
-        ValueTask.FromResult<ApprovalRecord?>(null);
+        ValueTask.FromResult(Approvals.TryGetValue(approvalId, out ApprovalRecord? record) ? record : null);
 
     public ValueTask<IReadOnlyCollection<ApprovalRecord>> GetPendingApprovalsAsync(CancellationToken cancellationToken) =>
-        ValueTask.FromResult<IReadOnlyCollection<ApprovalRecord>>([]);
+        ValueTask.FromResult<IReadOnlyCollection<ApprovalRecord>>(
+            Approvals.Values.Where(record => record.IsPending).ToArray());
 
-    public ValueTask SaveApprovalAsync(ApprovalRecord approvalRecord, CancellationToken cancellationToken) =>
-        ValueTask.CompletedTask;
+    public ValueTask SaveApprovalAsync(ApprovalRecord approvalRecord, CancellationToken cancellationToken)
+    {
+        Approvals[approvalRecord.ApprovalId] = approvalRecord;
+        return ValueTask.CompletedTask;
+    }
 
     public ValueTask<OwnerConfiguration?> GetOwnerConfigurationAsync(CancellationToken cancellationToken) =>
         ValueTask.FromResult<OwnerConfiguration?>(null);

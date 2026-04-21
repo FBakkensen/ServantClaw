@@ -1,5 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using ServantClaw.Application.Approvals;
 using ServantClaw.Application.Commands;
 using ServantClaw.Application.Intake;
 using ServantClaw.Application.Runtime;
@@ -20,6 +21,7 @@ public static class ServiceCollectionExtensions
 
         services.AddSingleton<ChatCommandProcessor>();
         services.AddSingleton<ThreadMappingCoordinator>();
+        services.TryAddSingleton<IApprovalCoordinator, ApprovalCoordinator>();
         services.AddSingleton<IProjectCatalog, FileSystemProjectCatalog>();
         services.TryAddSingleton<IIdGenerator, GuidIdGenerator>();
         services.TryAddSingleton<IClock, SystemClock>();

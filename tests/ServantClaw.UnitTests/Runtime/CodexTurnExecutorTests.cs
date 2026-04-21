@@ -3,6 +3,7 @@ using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
+using ServantClaw.Application.Approvals;
 using ServantClaw.Application.Commands;
 using ServantClaw.Application.Runtime;
 using ServantClaw.Domain.Agents;
@@ -246,7 +247,7 @@ public sealed class CodexTurnExecutorTests
     }
 
     [Fact]
-    public async Task ApprovalRequestShouldAutoDenyAndReportNotSupported()
+    public async Task ApprovedApprovalShouldContinueWithAcceptAndDeliverFinalResponse()
     {
         InMemoryStateStore stateStore = new();
         stateStore.ThreadMappings[SampleContext] = new ThreadMapping(SampleContext, new ThreadReference("codex-x"));
@@ -255,36 +256,70 @@ public sealed class CodexTurnExecutorTests
         ApprovalRecord approval = CreateApprovalRecord("approval-1");
         backend.SendTurnAsync(Arg.Any<BackendTurnRequest>(), Arg.Any<CancellationToken>())
             .Returns(new ValueTask<BackendTurnResult>(new BackendTurnResult(null, approval)));
-        backend.ContinueApprovedActionAsync(approval.ApprovalId, ApprovalDecision.Denied, Arg.Any<CancellationToken>())
-            .Returns(new ValueTask<BackendTurnResult>(new BackendTurnResult("ignored", null)));
+        backend.ContinueApprovedActionAsync(approval.ApprovalId, ApprovalDecision.Approved, Arg.Any<CancellationToken>())
+            .Returns(new ValueTask<BackendTurnResult>(new BackendTurnResult("action completed", null)));
 
-        CodexTurnExecutor executor = CreateExecutor(backend, stateStore, sink);
+        StubApprovalCoordinator coordinator = new();
+        coordinator.Decisions.Enqueue(ApprovalDecision.Approved);
+
+        CodexTurnExecutor executor = CreateExecutor(backend, stateStore, sink, coordinator);
         await executor.ExecuteAsync(CreateTurn("hi"), CancellationToken.None);
 
-        await backend.Received(1).ContinueApprovedActionAsync(approval.ApprovalId, ApprovalDecision.Denied, Arg.Any<CancellationToken>());
-        sink.Messages.Should().ContainSingle().Which.Text.Should().Be(CodexTurnExecutor.ApprovalNotSupportedReply);
+        coordinator.WaitedFor.Should().ContainSingle().Which.Should().Be(approval);
+        await backend.Received(1).ContinueApprovedActionAsync(approval.ApprovalId, ApprovalDecision.Approved, Arg.Any<CancellationToken>());
+        await backend.DidNotReceive().ContinueApprovedActionAsync(Arg.Any<ApprovalId>(), ApprovalDecision.Denied, Arg.Any<CancellationToken>());
+        sink.Messages.Should().ContainSingle().Which.Text.Should().Be("action completed");
     }
 
     [Fact]
-    public async Task ApprovalLoopShouldStopAtMaxIterations()
+    public async Task DeniedApprovalShouldContinueWithDeclineAndDeliverFinalResponse()
     {
         InMemoryStateStore stateStore = new();
         stateStore.ThreadMappings[SampleContext] = new ThreadMapping(SampleContext, new ThreadReference("codex-x"));
         RecordingChatReplySink sink = new();
         IBackendClient backend = Substitute.For<IBackendClient>();
-        ApprovalRecord approval = CreateApprovalRecord("approval-loop");
-        BackendTurnResult approvalResult = new(null, approval);
+        ApprovalRecord approval = CreateApprovalRecord("approval-2");
         backend.SendTurnAsync(Arg.Any<BackendTurnRequest>(), Arg.Any<CancellationToken>())
-            .Returns(new ValueTask<BackendTurnResult>(approvalResult));
+            .Returns(new ValueTask<BackendTurnResult>(new BackendTurnResult(null, approval)));
         backend.ContinueApprovedActionAsync(approval.ApprovalId, ApprovalDecision.Denied, Arg.Any<CancellationToken>())
-            .Returns(new ValueTask<BackendTurnResult>(approvalResult));
+            .Returns(new ValueTask<BackendTurnResult>(new BackendTurnResult("backend acknowledged denial", null)));
 
-        CodexTurnExecutor executor = CreateExecutor(backend, stateStore, sink);
+        StubApprovalCoordinator coordinator = new();
+        coordinator.Decisions.Enqueue(ApprovalDecision.Denied);
+
+        CodexTurnExecutor executor = CreateExecutor(backend, stateStore, sink, coordinator);
         await executor.ExecuteAsync(CreateTurn("hi"), CancellationToken.None);
 
-        await backend.Received(CodexTurnExecutor.MaxApprovalDenyIterations)
-            .ContinueApprovedActionAsync(approval.ApprovalId, ApprovalDecision.Denied, Arg.Any<CancellationToken>());
-        sink.Messages.Should().ContainSingle().Which.Text.Should().Be(CodexTurnExecutor.ApprovalNotSupportedReply);
+        await backend.Received(1).ContinueApprovedActionAsync(approval.ApprovalId, ApprovalDecision.Denied, Arg.Any<CancellationToken>());
+        sink.Messages.Should().ContainSingle().Which.Text.Should().Be("backend acknowledged denial");
+    }
+
+    [Fact]
+    public async Task ChainedApprovalsShouldResolveEachAndDeliverSingleFinalResponse()
+    {
+        InMemoryStateStore stateStore = new();
+        stateStore.ThreadMappings[SampleContext] = new ThreadMapping(SampleContext, new ThreadReference("codex-x"));
+        RecordingChatReplySink sink = new();
+        IBackendClient backend = Substitute.For<IBackendClient>();
+        ApprovalRecord firstApproval = CreateApprovalRecord("approval-A");
+        ApprovalRecord secondApproval = CreateApprovalRecord("approval-B");
+
+        backend.SendTurnAsync(Arg.Any<BackendTurnRequest>(), Arg.Any<CancellationToken>())
+            .Returns(new ValueTask<BackendTurnResult>(new BackendTurnResult(null, firstApproval)));
+        backend.ContinueApprovedActionAsync(firstApproval.ApprovalId, ApprovalDecision.Approved, Arg.Any<CancellationToken>())
+            .Returns(new ValueTask<BackendTurnResult>(new BackendTurnResult(null, secondApproval)));
+        backend.ContinueApprovedActionAsync(secondApproval.ApprovalId, ApprovalDecision.Approved, Arg.Any<CancellationToken>())
+            .Returns(new ValueTask<BackendTurnResult>(new BackendTurnResult("all done", null)));
+
+        StubApprovalCoordinator coordinator = new();
+        coordinator.Decisions.Enqueue(ApprovalDecision.Approved);
+        coordinator.Decisions.Enqueue(ApprovalDecision.Approved);
+
+        CodexTurnExecutor executor = CreateExecutor(backend, stateStore, sink, coordinator);
+        await executor.ExecuteAsync(CreateTurn("hi"), CancellationToken.None);
+
+        coordinator.WaitedFor.Should().BeEquivalentTo(new[] { firstApproval, secondApproval }, options => options.WithStrictOrdering());
+        sink.Messages.Should().ContainSingle().Which.Text.Should().Be("all done");
     }
 
     [Fact]
@@ -293,15 +328,18 @@ public sealed class CodexTurnExecutorTests
         IBackendClient backend = Substitute.For<IBackendClient>();
         InMemoryStateStore stateStore = new();
         RecordingChatReplySink sink = new();
+        StubApprovalCoordinator coordinator = new();
         ILogger<CodexTurnExecutor> noopLogger = NullLogger<CodexTurnExecutor>.Instance;
 
-        Action nullBackend = () => _ = new CodexTurnExecutor(null!, stateStore, sink, noopLogger);
-        Action nullStateStore = () => _ = new CodexTurnExecutor(backend, null!, sink, noopLogger);
-        Action nullSink = () => _ = new CodexTurnExecutor(backend, stateStore, null!, noopLogger);
-        Action nullLogger = () => _ = new CodexTurnExecutor(backend, stateStore, sink, null!);
+        Action nullBackend = () => _ = new CodexTurnExecutor(null!, stateStore, coordinator, sink, noopLogger);
+        Action nullStateStore = () => _ = new CodexTurnExecutor(backend, null!, coordinator, sink, noopLogger);
+        Action nullCoordinator = () => _ = new CodexTurnExecutor(backend, stateStore, null!, sink, noopLogger);
+        Action nullSink = () => _ = new CodexTurnExecutor(backend, stateStore, coordinator, null!, noopLogger);
+        Action nullLogger = () => _ = new CodexTurnExecutor(backend, stateStore, coordinator, sink, null!);
 
         nullBackend.Should().Throw<ArgumentNullException>().Which.ParamName.Should().Be("backendClient");
         nullStateStore.Should().Throw<ArgumentNullException>().Which.ParamName.Should().Be("stateStore");
+        nullCoordinator.Should().Throw<ArgumentNullException>().Which.ParamName.Should().Be("approvalCoordinator");
         nullSink.Should().Throw<ArgumentNullException>().Which.ParamName.Should().Be("chatReplySink");
         nullLogger.Should().Throw<ArgumentNullException>().Which.ParamName.Should().Be("logger");
     }
@@ -322,8 +360,14 @@ public sealed class CodexTurnExecutorTests
     private static CodexTurnExecutor CreateExecutor(
         IBackendClient backend,
         IStateStore stateStore,
-        IChatReplySink sink) =>
-        new(backend, stateStore, sink, NullLogger<CodexTurnExecutor>.Instance);
+        IChatReplySink sink,
+        IApprovalCoordinator? coordinator = null) =>
+        new(
+            backend,
+            stateStore,
+            coordinator ?? new StubApprovalCoordinator(),
+            sink,
+            NullLogger<CodexTurnExecutor>.Instance);
 
     private static QueuedTurn CreateTurn(string text) =>
         new(SampleContext, text, DateTimeOffset.UtcNow);
@@ -345,5 +389,30 @@ public sealed class CodexTurnExecutorTests
             Messages.Add((chatId, message));
             return ValueTask.CompletedTask;
         }
+    }
+
+    private sealed class StubApprovalCoordinator : IApprovalCoordinator
+    {
+        public List<ApprovalRecord> WaitedFor { get; } = [];
+
+        public Queue<ApprovalDecision> Decisions { get; } = new();
+
+        public ValueTask<ApprovalDecision> WaitForDecisionAsync(ApprovalRecord record, CancellationToken cancellationToken)
+        {
+            WaitedFor.Add(record);
+            if (Decisions.Count == 0)
+            {
+                throw new InvalidOperationException("No queued decisions for stub coordinator.");
+            }
+
+            return ValueTask.FromResult(Decisions.Dequeue());
+        }
+
+        public ValueTask<ApprovalResolutionResult> ResolveAsync(
+            ApprovalId approvalId,
+            ChatId commandChatId,
+            ApprovalDecision decision,
+            CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
     }
 }

@@ -1,9 +1,11 @@
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
+using ServantClaw.Application.Approvals;
 using ServantClaw.Application.Commands;
 using ServantClaw.Application.Intake.Models;
 using ServantClaw.Application.Runtime;
 using ServantClaw.Domain.Agents;
+using ServantClaw.Domain.Approvals;
 using ServantClaw.Domain.Common;
 using ServantClaw.Domain.Routing;
 using ServantClaw.Domain.State;
@@ -104,7 +106,7 @@ public sealed class LoggingChatUpdateIntakeTests
     {
         ThreadMappingCoordinator threadMappingCoordinator = new(stateStore);
         return new(
-            new ChatCommandProcessor(stateStore, projectCatalog, threadMappingCoordinator),
+            new ChatCommandProcessor(stateStore, projectCatalog, threadMappingCoordinator, new StubApprovalCoordinator()),
             turnQueue,
             stateStore,
             projectCatalog,
@@ -151,5 +153,18 @@ public sealed class LoggingChatUpdateIntakeTests
             EnqueuedTurns.Add(turn);
             return ValueTask.CompletedTask;
         }
+    }
+
+    private sealed class StubApprovalCoordinator : IApprovalCoordinator
+    {
+        public ValueTask<ApprovalDecision> WaitForDecisionAsync(ApprovalRecord record, CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
+        public ValueTask<ApprovalResolutionResult> ResolveAsync(
+            ApprovalId approvalId,
+            ChatId commandChatId,
+            ApprovalDecision decision,
+            CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
     }
 }

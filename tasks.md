@@ -460,7 +460,7 @@ Verification:
 - Send a real or controlled Telegram message and confirm a backend-backed reply returns to the same chat
 
 ## T-016 - Implement durable approval handling and Telegram approval commands
-Status: [ ]
+Status: [x]
 Goal: Pause risky actions for approval, persist the pending record, and resume or deny the correct blocked flow from Telegram.
 
 Scope:
